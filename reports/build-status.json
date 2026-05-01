@@ -1,16 +1,17 @@
 {
-  "status": "production foundation milestone 1 complete",
-  "safety": "official Dropbox daemon untouched; sync remains dry-run/scaffolded",
+  "status": "ACFS integration milestone complete",
+  "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
+  "latest_commit": "9d1ca01",
   "implemented": [
-    "SQLite pending operation helpers",
-    "entry upsert support",
-    "local scanner with Dropbox content hashing",
-    "conservative conflict policy engine",
-    "unit tests for scanner and conflict policy"
+    "local ACFS reference clone under workspace/external",
+    "ACFS installer checksum notification workflow for scripts/install-linux.sh",
+    "ACFS validation workflow",
+    "docs/ACFS.md integration notes",
+    "README link to ACFS integration docs"
   ],
-  "next": [
-    "wire dry-run sync to scanner and state",
-    "add Dropbox list_folder API interfaces with mocks",
-    "add retry/backoff worker queue"
+  "pending": [
+    "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
+    "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
+    "continue production sync engine implementation"
   ]
 }
