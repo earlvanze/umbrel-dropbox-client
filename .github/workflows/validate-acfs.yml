@@ -1,0 +1,60 @@
+# ACFS Integration Validation Workflow
+# Based on Dicklesworthstone/agentic_coding_flywheel_setup templates.
+
+name: Validate ACFS Integration
+
+on:
+  workflow_dispatch:
+
+env:
+  TOOL_NAME: 'umbrel_dropbox_sync'
+  INSTALLER_PATH: 'scripts/install-linux.sh'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check installer exists
+        run: |
+          if [[ ! -f "${{ env.INSTALLER_PATH }}" ]]; then
+            echo "::error::Installer not found at ${{ env.INSTALLER_PATH }}"
+            exit 1
+          fi
+          echo "Installer found at ${{ env.INSTALLER_PATH }}"
+          echo "Size: $(stat -c%s "${{ env.INSTALLER_PATH }}") bytes"
+          echo "SHA256: $(sha256sum "${{ env.INSTALLER_PATH }}" | cut -d' ' -f1)"
+
+      - name: Check ACFS_REPO_DISPATCH_TOKEN secret
+        env:
+          TOKEN: ${{ secrets.ACFS_REPO_DISPATCH_TOKEN }}
+        run: |
+          if [[ -z "$TOKEN" ]]; then
+            echo "::warning::ACFS_REPO_DISPATCH_TOKEN secret is not set"
+            echo "Create this secret before relying on notify-acfs.yml."
+          else
+            echo "ACFS_REPO_DISPATCH_TOKEN secret is configured"
+          fi
+
+      - name: Check tool is in upstream checksums.yaml
+        run: |
+          CHECKSUMS=$(curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/main/checksums.yaml")
+          if ! echo "$CHECKSUMS" | grep -q "${{ env.TOOL_NAME }}:"; then
+            echo "::warning::Tool '${{ env.TOOL_NAME }}' is not yet in ACFS checksums.yaml"
+            echo "Add it upstream before expecting checksum validation to pass there."
+          else
+            echo "Tool '${{ env.TOOL_NAME }}' found in ACFS checksums.yaml"
+          fi
+
+      - name: Check notify workflow exists
+        run: |
+          test -f .github/workflows/notify-acfs.yml
+          echo "notify-acfs.yml workflow is present"
+
+      - name: Summary
+        run: |
+          echo "## ACFS Integration Validation" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Installer: \`${{ env.INSTALLER_PATH }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tool: \`${{ env.TOOL_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"

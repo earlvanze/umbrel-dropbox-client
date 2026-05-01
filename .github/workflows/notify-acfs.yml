@@ -1,0 +1,140 @@
+# ACFS Installer Change Notification Workflow
+# Based on Dicklesworthstone/agentic_coding_flywheel_setup templates.
+# This notifies ACFS when this project's Linux installer changes.
+
+name: Notify ACFS of Installer Changes
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/install-linux.sh'
+      - '.github/workflows/notify-acfs.yml'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Test without sending notification'
+        required: false
+        default: 'false'
+        type: boolean
+      force:
+        description: 'Force notification even if checksum unchanged'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  TOOL_NAME: 'umbrel_dropbox_sync'
+  INSTALLER_PATH: 'scripts/install-linux.sh'
+  ACFS_REPO: 'Dicklesworthstone/agentic_coding_flywheel_setup'
+
+jobs:
+  compute-and-notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    outputs:
+      sha256: ${{ steps.checksum.outputs.sha256 }}
+      changed: ${{ steps.compare.outputs.changed }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Validate installer exists
+        id: validate
+        run: |
+          if [[ ! -f "${{ env.INSTALLER_PATH }}" ]]; then
+            echo "::error::Installer not found at ${{ env.INSTALLER_PATH }}"
+            exit 1
+          fi
+          echo "installer_size=$(stat -c%s "${{ env.INSTALLER_PATH }}")" >> "$GITHUB_OUTPUT"
+
+      - name: Compute SHA256 checksum
+        id: checksum
+        run: |
+          SHA256=$(sha256sum "${{ env.INSTALLER_PATH }}" | cut -d' ' -f1)
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "Computed SHA256: $SHA256"
+
+      - name: Get previous checksum if available
+        id: previous
+        run: |
+          if git show HEAD~1:"${{ env.INSTALLER_PATH }}" > /tmp/previous_installer 2>/dev/null; then
+            PREV_SHA256=$(sha256sum /tmp/previous_installer | cut -d' ' -f1)
+            echo "prev_sha256=$PREV_SHA256" >> "$GITHUB_OUTPUT"
+            echo "Previous SHA256: $PREV_SHA256"
+          else
+            echo "prev_sha256=none" >> "$GITHUB_OUTPUT"
+            echo "No previous version found"
+          fi
+
+      - name: Compare checksums
+        id: compare
+        run: |
+          if [[ "${{ steps.checksum.outputs.sha256 }}" != "${{ steps.previous.outputs.prev_sha256 }}" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Checksum changed, will notify ACFS"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Checksum unchanged"
+          fi
+
+      - name: Prepare notification payload
+        id: payload
+        if: steps.compare.outputs.changed == 'true' || github.event.inputs.force == 'true'
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg tool "${{ env.TOOL_NAME }}" \
+            --arg source_repo "${{ github.repository }}" \
+            --arg ref "${{ github.ref }}" \
+            --arg sha "${{ github.sha }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg timestamp "$(date -Iseconds)" \
+            '{
+              tool: $tool,
+              source_repo: $source_repo,
+              ref: $ref,
+              sha: $sha,
+              actor: $actor,
+              timestamp: $timestamp
+            }')
+          echo "payload<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PAYLOAD" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "$PAYLOAD" | jq .
+
+      - name: Send notification to ACFS dry run
+        if: |
+          (steps.compare.outputs.changed == 'true' || github.event.inputs.force == 'true') &&
+          github.event.inputs.dry_run == 'true'
+        run: |
+          echo "::notice::DRY RUN - Would send notification to ACFS"
+          echo '${{ steps.payload.outputs.payload }}' | jq .
+
+      - name: Send notification to ACFS
+        if: |
+          (steps.compare.outputs.changed == 'true' || github.event.inputs.force == 'true') &&
+          github.event.inputs.dry_run != 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.ACFS_REPO_DISPATCH_TOKEN }}
+          repository: ${{ env.ACFS_REPO }}
+          event-type: upstream-changed
+          client-payload: ${{ steps.payload.outputs.payload }}
+
+      - name: Log result
+        if: always()
+        run: |
+          echo "## ACFS Notification Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tool | ${{ env.TOOL_NAME }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Installer | ${{ env.INSTALLER_PATH }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SHA256 | \`${{ steps.checksum.outputs.sha256 }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Changed | ${{ steps.compare.outputs.changed }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dry Run | ${{ github.event.inputs.dry_run || 'false' }} |" >> "$GITHUB_STEP_SUMMARY"

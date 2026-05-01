@@ -50,6 +50,10 @@ umbrel-dropbox-sync status
 curl -fsSL https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-sync/master/scripts/install-linux.sh | bash
 ```
 
+## Agentic coding flywheel
+
+This repo is being aligned with the Agentic Coding Flywheel Setup (ACFS) workflow for production agent operations, installer checksum notifications, and repeatable validation. See [ACFS integration](docs/ACFS.md).
+
 ## Distribution docs
 
 - [APT plan](docs/APT.md)
