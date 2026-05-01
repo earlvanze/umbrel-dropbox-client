@@ -1,0 +1,36 @@
+package scan
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestWalkIgnoresStateDirAndHashesFiles(t *testing.T) {
+	root := t.TempDir()
+	must := func(err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600))
+	must(os.Mkdir(filepath.Join(root, ".umbrel-dropbox-sync"), 0700))
+	must(os.WriteFile(filepath.Join(root, ".umbrel-dropbox-sync", "state.db"), []byte("ignore"), 0600))
+	files, err := Walk(root, DefaultOptions())
+	must(err)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d: %#v", len(files), files)
+	}
+	if files[0].Path != "a.txt" {
+		t.Fatalf("unexpected path %q", files[0].Path)
+	}
+	if files[0].ContentHash == "" {
+		t.Fatal("missing content hash")
+	}
+}
+
+func TestDropboxPath(t *testing.T) {
+	if got := DropboxPath("foo/bar.txt"); got != "/foo/bar.txt" {
+		t.Fatalf("got %q", got)
+	}
+}

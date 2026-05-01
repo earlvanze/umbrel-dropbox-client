@@ -1,0 +1,16 @@
+{
+  "status": "production foundation milestone 1 complete",
+  "safety": "official Dropbox daemon untouched; sync remains dry-run/scaffolded",
+  "implemented": [
+    "SQLite pending operation helpers",
+    "entry upsert support",
+    "local scanner with Dropbox content hashing",
+    "conservative conflict policy engine",
+    "unit tests for scanner and conflict policy"
+  ],
+  "next": [
+    "wire dry-run sync to scanner and state",
+    "add Dropbox list_folder API interfaces with mocks",
+    "add retry/backoff worker queue"
+  ]
+}
