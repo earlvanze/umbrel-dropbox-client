@@ -1,12 +1,14 @@
 # Umbrel Dropbox Sync Status
 
-Status: production foundation milestone 1 complete.
+Status: production foundation milestone 2 in progress.
 
 Implemented:
 - Durable pending operation helpers in SQLite state store.
 - Entry upsert support for scanner/sync engine.
 - Local filesystem scanner with Dropbox content hashing and ignored state dirs.
 - Conservative conflict policy engine with tests.
+- `sync --once --dry-run` scans local root and upserts state entries.
+- Dropbox `list_folder` / `list_folder/continue` client interfaces added.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -14,8 +16,8 @@ Safety:
 - Sync remains dry-run/scaffolded until live auth and reconciliation are reviewed.
 
 Next:
-1. Wire `sync --once --dry-run` to scanner + state entry updates.
-2. Add Dropbox list_folder/list_folder/continue interfaces with mock tests.
+1. Wire remote Dropbox listing into dry-run reconciliation.
+2. Add mock tests for Dropbox list_folder/list_folder/continue interfaces.
 3. Add worker queue processor with retry/backoff semantics.
 
 ## ACFS integration

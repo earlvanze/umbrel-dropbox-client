@@ -26,9 +26,53 @@ type Account struct {
 	} `json:"name"`
 }
 
+type Metadata struct {
+	Tag         string    `json:".tag"`
+	Name        string    `json:"name"`
+	PathLower   string    `json:"path_lower"`
+	PathDisplay string    `json:"path_display"`
+	ID          string    `json:"id"`
+	ClientMtime time.Time `json:"client_modified"`
+	ServerMtime time.Time `json:"server_modified"`
+	Rev         string    `json:"rev"`
+	Size        int64     `json:"size"`
+	ContentHash string    `json:"content_hash"`
+}
+
+type ListFolderResult struct {
+	Entries []Metadata `json:"entries"`
+	Cursor  string     `json:"cursor"`
+	HasMore bool       `json:"has_more"`
+}
+
 func (c *Client) CurrentAccount(ctx context.Context) (*Account, error) {
 	var out Account
 	if err := c.rpc(ctx, "https://api.dropboxapi.com/2/users/get_current_account", map[string]any{}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ListFolder(ctx context.Context, path string, recursive bool) (*ListFolderResult, error) {
+	var out ListFolderResult
+	in := map[string]any{
+		"path":                                path,
+		"recursive":                           recursive,
+		"include_media_info":                  false,
+		"include_deleted":                     false,
+		"include_has_explicit_shared_members": false,
+		"include_mounted_folders":             true,
+		"include_non_downloadable_files":      false,
+	}
+	if err := c.rpc(ctx, "https://api.dropboxapi.com/2/files/list_folder", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ListFolderContinue(ctx context.Context, cursor string) (*ListFolderResult, error) {
+	var out ListFolderResult
+	if err := c.rpc(ctx, "https://api.dropboxapi.com/2/files/list_folder/continue", map[string]any{"cursor": cursor}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

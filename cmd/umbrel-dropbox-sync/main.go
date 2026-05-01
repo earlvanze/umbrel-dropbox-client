@@ -10,6 +10,7 @@ import (
 
 	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
 	"github.com/earl/umbrel-dropbox-sync/internal/hash"
+	"github.com/earl/umbrel-dropbox-sync/internal/scan"
 	"github.com/earl/umbrel-dropbox-sync/internal/state"
 )
 
@@ -45,7 +46,7 @@ Commands:
   status [--db PATH]
   hash PATH
   remote-account --token-env DROPBOX_TOKEN
-  sync --once --dry-run [--db PATH]
+  sync --once --dry-run [--db PATH] [--root PATH]
 
 MVP scaffold. Uses DROPBOX_TOKEN or --token-env for API calls.`)
 }
@@ -116,13 +117,41 @@ func cmdSync(args []string) {
 	dry := fs.Bool("dry-run", true, "do not write remote/local changes")
 	once := fs.Bool("once", true, "run one sync cycle")
 	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
+	rootFlag := fs.String("root", "", "local sync root override")
 	_ = fs.Parse(args)
-	_ = once
+	if !*once {
+		fatal("continuous sync is not enabled yet; use --once")
+	}
+	if !*dry {
+		fatal("live sync is not enabled yet; use --dry-run")
+	}
 	s, err := state.Open(*db)
 	must(err)
 	defer s.Close()
-	must(s.Event("sync.dry_run", fmt.Sprintf("dry_run=%v", *dry)))
-	fmt.Println("sync engine not enabled yet; dry-run event recorded")
+	must(s.Init())
+	root := *rootFlag
+	if root == "" {
+		root, err = s.GetConfig("root")
+		must(err)
+	}
+	if root == "" {
+		fatal("missing sync root; run init --root PATH or pass --root PATH")
+	}
+	root, err = filepath.Abs(root)
+	must(err)
+	files, err := scan.Walk(root, scan.DefaultOptions())
+	must(err)
+	for _, f := range files {
+		must(s.UpsertEntry(state.Entry{
+			Path:        scan.DropboxPath(f.Path),
+			ContentHash: f.ContentHash,
+			Size:        f.Size,
+			MTime:       f.ModTime,
+			State:       "local_scanned",
+		}))
+	}
+	must(s.Event("sync.dry_run.local_scan", fmt.Sprintf("root=%s files=%d", root, len(files))))
+	fmt.Printf("dry-run local scan complete: root=%s files=%d db=%s\n", root, len(files), *db)
 }
 
 func must(err error) {

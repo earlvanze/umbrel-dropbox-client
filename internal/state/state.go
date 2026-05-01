@@ -42,6 +42,14 @@ func (s *Store) SetConfig(k, v string) error {
 	_, err := s.db.Exec(`insert into config(key,value) values(?,?) on conflict(key) do update set value=excluded.value`, k, v)
 	return err
 }
+func (s *Store) GetConfig(k string) (string, error) {
+	var v string
+	err := s.db.QueryRow(`select value from config where key=?`, k).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return v, err
+}
 func (s *Store) Event(t, d string) error {
 	_, err := s.db.Exec(`insert into events(type,detail,created_at) values(?,?,?)`, t, d, time.Now().Format(time.RFC3339))
 	return err
