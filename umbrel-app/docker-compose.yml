@@ -1,0 +1,11 @@
+services:
+  app:
+    image: ghcr.io/earlvanze/umbrel-dropbox-sync:latest
+    restart: unless-stopped
+    ports:
+      - "8477:8477"
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+      - /home/umbrel/Dropbox:/dropbox
+    environment:
+      - UDS_CONFIG=/data/config.json

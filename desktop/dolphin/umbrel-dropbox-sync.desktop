@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/all;
+Actions=SyncNow;CopyDropboxLink;
+X-KDE-Priority=TopLevel
+
+[Desktop Action SyncNow]
+Name=Dropbox Sync: Sync now
+Icon=folder-sync
+Exec=umbrel-dropbox-sync sync --once --path %F
+
+[Desktop Action CopyDropboxLink]
+Name=Dropbox Sync: Copy link
+Icon=edit-copy
+Exec=umbrel-dropbox-sync share-link --copy %F

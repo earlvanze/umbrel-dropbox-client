@@ -1,0 +1,16 @@
+[Unit]
+Description=Umbrel Dropbox Sync daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/umbrel-dropbox-syncd --config %h/.config/umbrel-dropbox-sync/config.json
+Restart=on-failure
+RestartSec=10
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+[Install]
+WantedBy=default.target
