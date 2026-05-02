@@ -1,7 +1,7 @@
 {
-  "status": "production foundation milestone 3 in progress",
+  "status": "production foundation milestone 3 advanced: dry-run reconciliation planning added",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
-  "latest_commit": "f463a65",
+  "latest_commit": "2e66c3a",
   "implemented": [
     "local ACFS reference clone under workspace/external",
     "ACFS installer checksum notification workflow for scripts/install-linux.sh",
@@ -11,7 +11,8 @@
     "sync --once --dry-run now scans local root and upserts state entries",
     "Dropbox list_folder/list_folder/continue client methods added",
     "Dropbox paginated ListFolderAll helper with mock API tests",
-    "sync --once --dry-run --remote fetches remote Dropbox metadata and records remote-scanned entries/cursor without file mutations"
+    "sync --once --dry-run --remote fetches remote Dropbox metadata and records remote-scanned entries/cursor without file mutations",
+    "dry-run reconciliation builds explicit upload/download/conflict plans and records deduplicated pending ops/conflicts without file mutations"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
@@ -19,6 +20,7 @@
     "add worker queue processor with retry/backoff semantics",
     "validate OAuth/token handling against a non-production Dropbox test folder",
     "continue production sync engine implementation",
-    "expand dry-run reconciliation into explicit upload/download/conflict plans"
-  ]
+    "add non-production Dropbox fixture/integration pass for dry-run plan counts"
+  ],
+  "last_test": "go test ./... passed @ 2026-05-02T10:14:52Z"
 }

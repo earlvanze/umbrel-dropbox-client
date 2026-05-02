@@ -66,3 +66,29 @@ func (s *Store) AddConflict(path, reason, localPath, remoteRev string) (int64, e
 	}
 	return res.LastInsertId()
 }
+
+func (s *Store) EnqueueOpIfMissing(op, path string, payload any) (int64, bool, error) {
+	var id int64
+	err := s.db.QueryRow(`select id from pending_ops where op = ? and path = ? limit 1`, op, path).Scan(&id)
+	if err == nil {
+		return id, false, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, false, err
+	}
+	id, err = s.EnqueueOp(op, path, payload)
+	return id, true, err
+}
+
+func (s *Store) AddConflictIfMissing(path, reason, localPath, remoteRev string) (int64, bool, error) {
+	var id int64
+	err := s.db.QueryRow(`select id from conflicts where path = ? and reason = ? limit 1`, path, reason).Scan(&id)
+	if err == nil {
+		return id, false, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, false, err
+	}
+	id, err = s.AddConflict(path, reason, localPath, remoteRev)
+	return id, true, err
+}

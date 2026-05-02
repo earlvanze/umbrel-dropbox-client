@@ -10,6 +10,7 @@ import (
 
 	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
 	"github.com/earl/umbrel-dropbox-sync/internal/hash"
+	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
 	"github.com/earl/umbrel-dropbox-sync/internal/scan"
 	"github.com/earl/umbrel-dropbox-sync/internal/state"
 )
@@ -154,6 +155,7 @@ func cmdSync(args []string) {
 		}))
 	}
 	remoteFiles := 0
+	var remoteEntries []dropbox.Metadata
 	if *remote {
 		token := os.Getenv(*tokenEnv)
 		if token == "" {
@@ -163,6 +165,7 @@ func cmdSync(args []string) {
 		defer cancel()
 		entries, cursor, err := dropbox.New(token).ListFolderAll(ctx, *remotePath, true)
 		must(err)
+		remoteEntries = entries
 		for _, e := range entries {
 			if e.Tag != "file" {
 				continue
@@ -184,8 +187,27 @@ func cmdSync(args []string) {
 		}
 		must(s.SetConfig("dropbox_cursor", cursor))
 	}
-	must(s.Event("sync.dry_run.scan", fmt.Sprintf("root=%s local_files=%d remote_files=%d", root, len(files), remoteFiles)))
-	fmt.Printf("dry-run scan complete: root=%s local_files=%d remote_files=%d db=%s\n", root, len(files), remoteFiles, *db)
+	planOps, planConflicts, planNoop := 0, 0, 0
+	if *remote {
+		plan := reconcile.BuildDryRunPlan(files, remoteEntries)
+		planNoop = plan.Noop
+		for _, op := range plan.Ops {
+			if _, created, err := s.EnqueueOpIfMissing(op.Op, op.Path, op); err != nil {
+				must(err)
+			} else if created {
+				planOps++
+			}
+		}
+		for _, c := range plan.Conflicts {
+			if _, created, err := s.AddConflictIfMissing(c.Path, c.Reason, c.LocalPath, c.RemoteRev); err != nil {
+				must(err)
+			} else if created {
+				planConflicts++
+			}
+		}
+	}
+	must(s.Event("sync.dry_run.scan", fmt.Sprintf("root=%s local_files=%d remote_files=%d planned_ops=%d conflicts=%d noop=%d", root, len(files), remoteFiles, planOps, planConflicts, planNoop)))
+	fmt.Printf("dry-run scan complete: root=%s local_files=%d remote_files=%d planned_ops=%d conflicts=%d noop=%d db=%s\n", root, len(files), remoteFiles, planOps, planConflicts, planNoop, *db)
 }
 
 func must(err error) {
