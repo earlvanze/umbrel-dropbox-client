@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -29,6 +30,8 @@ func main() {
 		cmdInit(os.Args[2:])
 	case "status":
 		cmdStatus(os.Args[2:])
+	case "doctor":
+		cmdDoctor(os.Args[2:])
 	case "pause":
 		cmdPause(os.Args[2:], true)
 	case "resume":
@@ -55,6 +58,7 @@ func usage() {
 Commands:
   init --root PATH [--db PATH]
   status [--db PATH]
+  doctor [--db PATH] [--root PATH] [--token-file PATH]
   pause [--db PATH]
   resume [--db PATH]
   hash PATH
@@ -103,6 +107,84 @@ func cmdStatus(args []string) {
 	st, err := s.Status()
 	must(err)
 	fmt.Printf("root: %s\npaused: %v\nentries: %d\npending_ops: %d\nconflicts: %d\nlast_event: %s\n", st.Root, st.Paused, st.Entries, st.PendingOps, st.Conflicts, st.LastEvent)
+}
+
+func cmdDoctor(args []string) {
+	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
+	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
+	rootFlag := fs.String("root", "", "local sync root override")
+	tokenFile := fs.String("token-file", "", "secure token file path")
+	_ = fs.Parse(args)
+	issues := 0
+	s, err := state.Open(*db)
+	if err != nil {
+		fmt.Printf("FAIL db_open path=%s error=%v\n", *db, err)
+		os.Exit(1)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		fmt.Printf("FAIL db_init path=%s error=%v\n", *db, err)
+		os.Exit(1)
+	}
+	fmt.Printf("OK db path=%s\n", *db)
+	root := *rootFlag
+	if root == "" {
+		root, err = s.GetConfig("root")
+		if err != nil {
+			fmt.Printf("FAIL root_config error=%v\n", err)
+			issues++
+		}
+	}
+	if root == "" {
+		fmt.Println("WARN root missing; run init --root PATH or pass --root")
+		issues++
+	} else if st, err := os.Stat(root); err != nil {
+		fmt.Printf("FAIL root path=%s error=%v\n", root, err)
+		issues++
+	} else if !st.IsDir() {
+		fmt.Printf("FAIL root path=%s is not a directory\n", root)
+		issues++
+	} else {
+		fmt.Printf("OK root path=%s\n", root)
+	}
+	path := *tokenFile
+	if path == "" {
+		path, err = auth.DefaultTokenPath()
+		if err != nil {
+			fmt.Printf("WARN token_path error=%v\n", err)
+			issues++
+		}
+	}
+	if path != "" {
+		st, err := auth.TokenStatus(path)
+		if err != nil {
+			fmt.Printf("WARN token path=%s error=%v\n", path, err)
+			issues++
+		} else if st.Present {
+			fmt.Printf("OK token path=%s has_refresh=%v account_id=%s\n", path, st.HasRefresh, st.AccountID)
+		} else {
+			fmt.Printf("WARN token missing path=%s\n", path)
+			issues++
+		}
+	}
+	if _, err := net.DefaultResolver.LookupHost(context.Background(), "api.dropboxapi.com"); err != nil {
+		fmt.Printf("WARN dns api.dropboxapi.com error=%v\n", err)
+		issues++
+	} else {
+		fmt.Println("OK dns api.dropboxapi.com")
+	}
+	status, err := s.Status()
+	if err != nil {
+		fmt.Printf("FAIL status error=%v\n", err)
+		issues++
+	} else {
+		fmt.Printf("OK status paused=%v entries=%d pending_ops=%d conflicts=%d\n", status.Paused, status.Entries, status.PendingOps, status.Conflicts)
+	}
+	if issues > 0 {
+		fmt.Printf("doctor: completed with %d issue(s)\n", issues)
+		os.Exit(1)
+	}
+	fmt.Println("doctor: ok")
 }
 
 func cmdPause(args []string, paused bool) {

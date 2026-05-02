@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: pause/resume and daemon health added",
+  "status": "production foundation milestone 3 advanced: doctor CLI added",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -23,15 +23,16 @@
     "worker CLI guarded live mode with --live --i-understand-risk gates, token-file/env access token loading, and configured/overridden sync root",
     "daemon dry-run cycle scans local files, upserts entries, processes dry-run queue work, records audit events, and refuses daemon live mode",
     "pause/resume state and CLI commands with daemon cycle skip while paused",
-    "daemon health/status HTTP handler for /healthz and /status JSON responses when health_addr is configured"
+    "daemon health/status HTTP handler for /healthz and /status JSON responses when health_addr is configured",
+    "doctor CLI validates DB initialization, sync root, token file hygiene, Dropbox DNS, and local state summary"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
-    "add non-production OAuth validation and dry-run fixture/integration pass",
+    "add dry-run fixture/integration pass for deterministic plan counts",
     "validate OAuth device-code flow against a non-production Dropbox test folder",
     "continue production sync engine implementation",
     "add non-production Dropbox fixture/integration pass for dry-run plan counts"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T15:10:00Z"
+  "last_test": "go test ./... passed @ 2026-05-02T15:30:00Z"
 }
