@@ -22,6 +22,7 @@ Implemented:
 - Pause/resume state and CLI commands added; daemon skips cycles while paused.
 - Daemon health/status HTTP handler added for `/healthz` and `/status` JSON responses when `health_addr` is configured.
 - `doctor` CLI added to validate DB initialization, sync root, token file hygiene, Dropbox DNS, and local state summary.
+- Deterministic dry-run integration fixture added for local scan + remote metadata reconciliation + queue/conflict persistence counts.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -30,8 +31,8 @@ Safety:
 
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
-2. Add dry-run fixture/integration pass for deterministic plan counts.
-3. Add a non-production Dropbox fixture/integration pass for dry-run plan counts.
+2. Add remote delta cursor incremental ingestion tests.
+3. Add end-to-end dry-run CLI fixture command tests.
 
 Validation:
 - `gofmt` completed.
