@@ -26,6 +26,7 @@ Implemented:
 - Remote cursor helpers added: Dropbox latest-cursor API, remote metadata application helper, and tests for file-only state ingestion.
 - Remote delta ingestion loop added with stored cursor resume, paginated continue handling, file metadata application, cursor persistence, audit events, and tests.
 - Remote delta ingestion wired into daemon dry-run cycles and CLI dry-run sync via `--remote-delta`, with `--token-file` support and test coverage.
+- End-to-end CLI fixture tests added for init + dry-run sync + status and pause/resume flows.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -34,8 +35,8 @@ Safety:
 
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
-2. Add end-to-end dry-run CLI fixture command tests.
-3. Add end-to-end dry-run CLI fixture command tests.
+2. Continue production sync engine implementation.
+3. Add packaged install/service smoke tests.
 
 Validation:
 - `gofmt` completed.
