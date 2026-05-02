@@ -29,6 +29,10 @@ func main() {
 		cmdInit(os.Args[2:])
 	case "status":
 		cmdStatus(os.Args[2:])
+	case "pause":
+		cmdPause(os.Args[2:], true)
+	case "resume":
+		cmdPause(os.Args[2:], false)
 	case "hash":
 		cmdHash(os.Args[2:])
 	case "auth":
@@ -51,6 +55,8 @@ func usage() {
 Commands:
   init --root PATH [--db PATH]
   status [--db PATH]
+  pause [--db PATH]
+  resume [--db PATH]
   hash PATH
   auth status [--token-file PATH]
   auth save --token-env DROPBOX_TOKEN [--token-file PATH]
@@ -96,7 +102,23 @@ func cmdStatus(args []string) {
 	defer s.Close()
 	st, err := s.Status()
 	must(err)
-	fmt.Printf("root: %s\nentries: %d\npending_ops: %d\nconflicts: %d\nlast_event: %s\n", st.Root, st.Entries, st.PendingOps, st.Conflicts, st.LastEvent)
+	fmt.Printf("root: %s\npaused: %v\nentries: %d\npending_ops: %d\nconflicts: %d\nlast_event: %s\n", st.Root, st.Paused, st.Entries, st.PendingOps, st.Conflicts, st.LastEvent)
+}
+
+func cmdPause(args []string, paused bool) {
+	fs := flag.NewFlagSet("pause", flag.ExitOnError)
+	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
+	_ = fs.Parse(args)
+	s, err := state.Open(*db)
+	must(err)
+	defer s.Close()
+	must(s.Init())
+	must(s.SetPaused(paused))
+	if paused {
+		fmt.Printf("paused db=%s\n", *db)
+		return
+	}
+	fmt.Printf("resumed db=%s\n", *db)
 }
 
 func cmdHash(args []string) {

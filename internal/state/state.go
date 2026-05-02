@@ -11,6 +11,7 @@ import (
 type Store struct{ db *sql.DB }
 type Status struct {
 	Root       string
+	Paused     bool
 	Entries    int
 	PendingOps int
 	Conflicts  int
@@ -67,9 +68,31 @@ func (s *Store) Event(t, d string) error {
 	_, err := s.db.Exec(`insert into events(type,detail,created_at) values(?,?,?)`, t, d, time.Now().Format(time.RFC3339))
 	return err
 }
+
+func (s *Store) SetPaused(paused bool) error {
+	value := "false"
+	event := "resume"
+	if paused {
+		value = "true"
+		event = "pause"
+	}
+	if err := s.SetConfig("paused", value); err != nil {
+		return err
+	}
+	return s.Event(event, "")
+}
+
+func (s *Store) IsPaused() (bool, error) {
+	v, err := s.GetConfig("paused")
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes"), nil
+}
 func (s *Store) Status() (Status, error) {
 	var st Status
 	_ = s.db.QueryRow(`select value from config where key='root'`).Scan(&st.Root)
+	st.Paused, _ = s.IsPaused()
 	_ = s.db.QueryRow(`select count(*) from entries`).Scan(&st.Entries)
 	_ = s.db.QueryRow(`select count(*) from pending_ops where status = 'pending'`).Scan(&st.PendingOps)
 	_ = s.db.QueryRow(`select count(*) from conflicts`).Scan(&st.Conflicts)

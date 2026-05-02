@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/earl/umbrel-dropbox-sync/internal/config"
@@ -37,6 +39,8 @@ func New(cfg config.Config, store *state.Store, logger *slog.Logger) *Daemon {
 func (d *Daemon) Run(ctx context.Context) error {
 	d.log.Info("daemon started", "root", d.cfg.Root, "dry_run", d.cfg.DryRun)
 	_ = d.store.Event("daemon.start", d.cfg.Root)
+	shutdownHealth := d.startHealth(ctx)
+	defer shutdownHealth()
 	if _, err := d.RunCycle(ctx); err != nil {
 		return err
 	}
@@ -60,12 +64,70 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
+func (d *Daemon) HealthHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" && r.URL.Path != "/status" {
+			http.NotFound(w, r)
+			return
+		}
+		st, err := d.store.Status()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":          true,
+			"root":        st.Root,
+			"paused":      st.Paused,
+			"entries":     st.Entries,
+			"pending_ops": st.PendingOps,
+			"conflicts":   st.Conflicts,
+			"last_event":  st.LastEvent,
+		})
+	})
+}
+
+func (d *Daemon) startHealth(ctx context.Context) func() {
+	if d.cfg.HealthAddr == "" {
+		return func() {}
+	}
+	server := &http.Server{Addr: d.cfg.HealthAddr, Handler: d.HealthHandler(), ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			_ = d.store.Event("daemon.health_error", err.Error())
+			d.log.Error("health server stopped", "error", err)
+		}
+	}()
+	return func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}
+}
+
 func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 	if d.store == nil {
 		return CycleStats{}, fmt.Errorf("daemon missing store")
 	}
 	if d.cfg.Root == "" {
 		return CycleStats{}, fmt.Errorf("daemon missing root")
+	}
+	paused, err := d.store.IsPaused()
+	if err != nil {
+		return CycleStats{}, err
+	}
+	if paused {
+		if err := d.store.Event("daemon.paused", "cycle skipped"); err != nil {
+			return CycleStats{}, err
+		}
+		return CycleStats{Root: d.cfg.Root}, nil
 	}
 	if !d.cfg.DryRun {
 		return CycleStats{}, fmt.Errorf("daemon live mode is not enabled; use CLI worker --live for guarded transfers")

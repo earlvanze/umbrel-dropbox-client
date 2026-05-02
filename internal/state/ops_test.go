@@ -99,3 +99,41 @@ func TestAddConflictIfMissingDedupesByPathAndReason(t *testing.T) {
 		t.Fatalf("second id=%d created=%v err=%v", id2, created, err)
 	}
 }
+
+func TestPausedStateRoundTrip(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	paused, err := s.IsPaused()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if paused {
+		t.Fatal("new store should not be paused")
+	}
+	if err := s.SetPaused(true); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.Paused {
+		t.Fatalf("status=%#v", st)
+	}
+	if err := s.SetPaused(false); err != nil {
+		t.Fatal(err)
+	}
+	paused, err = s.IsPaused()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if paused {
+		t.Fatal("store should be resumed")
+	}
+}

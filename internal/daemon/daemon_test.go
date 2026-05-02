@@ -4,8 +4,11 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/earl/umbrel-dropbox-sync/internal/config"
@@ -60,4 +63,50 @@ func testStore(t *testing.T) *state.Store {
 		t.Fatal(err)
 	}
 	return s
+}
+
+func TestRunCycleSkipsWhenPaused(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := testStore(t)
+	if err := s.SetPaused(true); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: root, DryRun: true}, s, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	stats, err := d.RunCycle(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.LocalFiles != 0 || stats.WorkerProcessed != 0 {
+		t.Fatalf("stats=%#v", stats)
+	}
+	st, err := s.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Entries != 0 || !st.Paused || st.LastEvent == "" {
+		t.Fatalf("status=%#v", st)
+	}
+}
+
+func TestHealthHandlerReturnsStatusJSON(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetConfig("root", "/tmp/root"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPaused(true); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: "/tmp/root", DryRun: true}, s, nil)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rr := httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"paused":true`) || !strings.Contains(rr.Body.String(), `"ok":true`) {
+		t.Fatalf("body=%s", rr.Body.String())
+	}
 }
