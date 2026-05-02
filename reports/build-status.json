@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: deterministic dry-run integration fixture added",
+  "status": "production foundation milestone 3 advanced: remote cursor helpers added",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -25,15 +25,16 @@
     "pause/resume state and CLI commands with daemon cycle skip while paused",
     "daemon health/status HTTP handler for /healthz and /status JSON responses when health_addr is configured",
     "doctor CLI validates DB initialization, sync root, token file hygiene, Dropbox DNS, and local state summary",
-    "deterministic dry-run integration fixture for local scan, remote metadata reconciliation, queued ops, and conflict persistence counts"
+    "deterministic dry-run integration fixture for local scan, remote metadata reconciliation, queued ops, and conflict persistence counts",
+    "remote cursor helpers for Dropbox latest-cursor API and file-only remote metadata state ingestion"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
-    "add remote delta cursor incremental ingestion tests",
+    "add remote delta cursor incremental ingestion loop/tests using stored cursors",
     "validate OAuth device-code flow against a non-production Dropbox test folder",
     "continue production sync engine implementation",
     "add end-to-end dry-run CLI fixture command tests"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T15:40:00Z"
+  "last_test": "go test ./... passed @ 2026-05-02T15:55:00Z"
 }

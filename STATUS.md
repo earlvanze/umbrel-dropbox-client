@@ -23,6 +23,7 @@ Implemented:
 - Daemon health/status HTTP handler added for `/healthz` and `/status` JSON responses when `health_addr` is configured.
 - `doctor` CLI added to validate DB initialization, sync root, token file hygiene, Dropbox DNS, and local state summary.
 - Deterministic dry-run integration fixture added for local scan + remote metadata reconciliation + queue/conflict persistence counts.
+- Remote cursor helpers added: Dropbox latest-cursor API, remote metadata application helper, and tests for file-only state ingestion.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -31,7 +32,7 @@ Safety:
 
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
-2. Add remote delta cursor incremental ingestion tests.
+2. Add remote delta cursor incremental ingestion loop/tests using stored cursors.
 3. Add end-to-end dry-run CLI fixture command tests.
 
 Validation:

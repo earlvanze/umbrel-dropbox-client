@@ -52,3 +52,30 @@ func TestListFolderAllUsesContinueAndAuth(t *testing.T) {
 		t.Fatalf("unexpected call order: %#v", seen)
 	}
 }
+
+func TestListFolderLatestCursor(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/files/list_folder/get_latest_cursor" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Fatalf("authorization header = %q", got)
+		}
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatal(err)
+		}
+		if req["path"] != "/Root" || req["recursive"] != true {
+			t.Fatalf("request=%#v", req)
+		}
+		_, _ = w.Write([]byte(`{"cursor":"latest-cursor"}`))
+	}))
+	defer srv.Close()
+	cursor, err := NewWithHTTP("test-token", srv.Client(), srv.URL).ListFolderLatestCursor(context.Background(), "/Root", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != "latest-cursor" {
+		t.Fatalf("cursor=%q", cursor)
+	}
+}

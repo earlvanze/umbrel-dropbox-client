@@ -94,6 +94,25 @@ func (c *Client) ListFolder(ctx context.Context, path string, recursive bool) (*
 	return &out, nil
 }
 
+func (c *Client) ListFolderLatestCursor(ctx context.Context, path string, recursive bool) (string, error) {
+	var out struct {
+		Cursor string `json:"cursor"`
+	}
+	in := map[string]any{
+		"path":                                path,
+		"recursive":                           recursive,
+		"include_media_info":                  false,
+		"include_deleted":                     false,
+		"include_has_explicit_shared_members": false,
+		"include_mounted_folders":             true,
+		"include_non_downloadable_files":      false,
+	}
+	if err := c.rpc(ctx, c.apiURL+"/files/list_folder/get_latest_cursor", in, &out); err != nil {
+		return "", err
+	}
+	return out.Cursor, nil
+}
+
 func (c *Client) ListFolderContinue(ctx context.Context, cursor string) (*ListFolderResult, error) {
 	var out ListFolderResult
 	if err := c.rpc(ctx, c.apiURL+"/files/list_folder/continue", map[string]any{"cursor": cursor}, &out); err != nil {
