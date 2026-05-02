@@ -33,6 +33,10 @@ func main() {
 		cmdStatus(os.Args[2:])
 	case "doctor":
 		cmdDoctor(os.Args[2:])
+	case "conflicts":
+		cmdConflicts(os.Args[2:])
+	case "resolve-conflict":
+		cmdResolveConflict(os.Args[2:])
 	case "pause":
 		cmdPause(os.Args[2:], true)
 	case "resume":
@@ -59,6 +63,8 @@ func usage() {
 Commands:
   init --root PATH [--db PATH] [--config PATH]
   status [--db PATH]
+  conflicts [--db PATH] [--limit N]
+  resolve-conflict --id ID [--note TEXT] [--db PATH]
   doctor [--db PATH] [--root PATH] [--token-file PATH]
   pause [--db PATH]
   resume [--db PATH]
@@ -198,6 +204,47 @@ func cmdDoctor(args []string) {
 		os.Exit(1)
 	}
 	fmt.Println("doctor: ok")
+}
+
+func cmdConflicts(args []string) {
+	fs := flag.NewFlagSet("conflicts", flag.ExitOnError)
+	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
+	limit := fs.Int("limit", 50, "maximum conflicts to list")
+	_ = fs.Parse(args)
+	s, err := state.Open(*db)
+	must(err)
+	defer s.Close()
+	must(s.Init())
+	items, err := s.ListConflicts(*limit)
+	must(err)
+	if len(items) == 0 {
+		fmt.Println("conflicts: none")
+		return
+	}
+	for _, c := range items {
+		fmt.Printf("id=%d path=%s reason=%s local_path=%s remote_rev=%s created_at=%s\n", c.ID, c.Path, c.Reason, c.LocalPath, c.RemoteRev, c.CreatedAt.Format(time.RFC3339))
+	}
+}
+
+func cmdResolveConflict(args []string) {
+	fs := flag.NewFlagSet("resolve-conflict", flag.ExitOnError)
+	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
+	id := fs.Int64("id", 0, "conflict id to mark resolved")
+	note := fs.String("note", "", "resolution note")
+	_ = fs.Parse(args)
+	if *id <= 0 {
+		fatal("resolve-conflict requires --id")
+	}
+	s, err := state.Open(*db)
+	must(err)
+	defer s.Close()
+	must(s.Init())
+	ok, err := s.ResolveConflict(*id, *note)
+	must(err)
+	if !ok {
+		fatal("conflict id %d not found", *id)
+	}
+	fmt.Printf("resolved conflict id=%d db=%s\n", *id, *db)
 }
 
 func cmdPause(args []string, paused bool) {

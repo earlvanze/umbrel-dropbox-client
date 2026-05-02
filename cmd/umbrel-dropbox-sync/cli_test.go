@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -90,4 +91,33 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatal(err)
 	}
 	return buf.String()
+}
+
+func TestCLIConflictsAndResolveFixture(t *testing.T) {
+	root := t.TempDir()
+	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	captureStdout(t, func() { cmdInit([]string{"--root", root, "--db", db}) })
+	s, err := state.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := s.AddConflict("/a.txt", "changed both", filepath.Join(root, "a.txt"), "r1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() { cmdConflicts([]string{"--db", db}) })
+	if !strings.Contains(out, "id=") || !strings.Contains(out, "path=/a.txt") || !strings.Contains(out, "remote_rev=r1") {
+		t.Fatalf("conflicts output=%q", out)
+	}
+	out = captureStdout(t, func() { cmdResolveConflict([]string{"--db", db, "--id", fmt.Sprint(id), "--note", "test"}) })
+	if !strings.Contains(out, "resolved conflict id=") {
+		t.Fatalf("resolve output=%q", out)
+	}
+	out = captureStdout(t, func() { cmdConflicts([]string{"--db", db}) })
+	if !strings.Contains(out, "conflicts: none") {
+		t.Fatalf("empty conflicts output=%q", out)
+	}
 }
