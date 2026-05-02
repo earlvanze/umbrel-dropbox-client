@@ -13,6 +13,10 @@ type PendingOp struct {
 	Payload   string
 	CreatedAt time.Time
 	Attempts  int
+	Status    string
+	RetryAt   time.Time
+	LastError string
+	Completed time.Time
 }
 
 func (s *Store) EnqueueOp(op, path string, payload any) (int64, error) {
@@ -24,7 +28,7 @@ func (s *Store) EnqueueOp(op, path string, payload any) (int64, error) {
 		}
 		raw = string(b)
 	}
-	res, err := s.db.Exec(`insert into pending_ops(op,path,payload,created_at) values(?,?,?,?)`, op, path, raw, time.Now().UTC().Format(time.RFC3339Nano))
+	res, err := s.db.Exec(`insert into pending_ops(op,path,payload,created_at,status) values(?,?,?,?,?)`, op, path, raw, time.Now().UTC().Format(time.RFC3339Nano), "pending")
 	if err != nil {
 		return 0, err
 	}
@@ -32,25 +36,37 @@ func (s *Store) EnqueueOp(op, path string, payload any) (int64, error) {
 }
 
 func (s *Store) NextPendingOp() (*PendingOp, error) {
-	row := s.db.QueryRow(`select id, op, path, coalesce(payload,''), created_at, attempts from pending_ops order by attempts asc, id asc limit 1`)
+	return s.NextReadyPendingOp(time.Now().UTC())
+}
+
+func (s *Store) NextReadyPendingOp(now time.Time) (*PendingOp, error) {
+	row := s.db.QueryRow(`select id, op, path, coalesce(payload,''), created_at, attempts, status, coalesce(retry_at,''), coalesce(last_error,''), coalesce(completed_at,'') from pending_ops where status = 'pending' and (retry_at is null or retry_at = '' or retry_at <= ?) order by attempts asc, id asc limit 1`, now.UTC().Format(time.RFC3339Nano))
 	var out PendingOp
-	var created string
-	if err := row.Scan(&out.ID, &out.Op, &out.Path, &out.Payload, &created, &out.Attempts); err != nil {
+	var created, retryAt, completedAt string
+	if err := row.Scan(&out.ID, &out.Op, &out.Path, &out.Payload, &created, &out.Attempts, &out.Status, &retryAt, &out.LastError, &completedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
-	if t, err := time.Parse(time.RFC3339Nano, created); err == nil {
-		out.CreatedAt = t
-	} else if t, err := time.Parse(time.RFC3339, created); err == nil {
-		out.CreatedAt = t
-	}
+	out.CreatedAt = parseTime(created)
+	out.RetryAt = parseTime(retryAt)
+	out.Completed = parseTime(completedAt)
 	return &out, nil
 }
 
 func (s *Store) MarkOpAttempt(id int64) error {
 	_, err := s.db.Exec(`update pending_ops set attempts = attempts + 1 where id = ?`, id)
+	return err
+}
+
+func (s *Store) RetryOp(id int64, retryAt time.Time, lastErr string) error {
+	_, err := s.db.Exec(`update pending_ops set attempts = attempts + 1, retry_at = ?, last_error = ?, status = 'pending' where id = ?`, retryAt.UTC().Format(time.RFC3339Nano), lastErr, id)
+	return err
+}
+
+func (s *Store) FailOp(id int64, lastErr string) error {
+	_, err := s.db.Exec(`update pending_ops set attempts = attempts + 1, status = 'failed', last_error = ?, completed_at = ? where id = ?`, lastErr, time.Now().UTC().Format(time.RFC3339Nano), id)
 	return err
 }
 
@@ -69,7 +85,7 @@ func (s *Store) AddConflict(path, reason, localPath, remoteRev string) (int64, e
 
 func (s *Store) EnqueueOpIfMissing(op, path string, payload any) (int64, bool, error) {
 	var id int64
-	err := s.db.QueryRow(`select id from pending_ops where op = ? and path = ? limit 1`, op, path).Scan(&id)
+	err := s.db.QueryRow(`select id from pending_ops where op = ? and path = ? and status = 'pending' limit 1`, op, path).Scan(&id)
 	if err == nil {
 		return id, false, nil
 	}
@@ -78,6 +94,35 @@ func (s *Store) EnqueueOpIfMissing(op, path string, payload any) (int64, bool, e
 	}
 	id, err = s.EnqueueOp(op, path, payload)
 	return id, true, err
+}
+
+func (s *Store) PendingOpByID(id int64) (*PendingOp, error) {
+	row := s.db.QueryRow(`select id, op, path, coalesce(payload,''), created_at, attempts, status, coalesce(retry_at,''), coalesce(last_error,''), coalesce(completed_at,'') from pending_ops where id = ?`, id)
+	var out PendingOp
+	var created, retryAt, completedAt string
+	if err := row.Scan(&out.ID, &out.Op, &out.Path, &out.Payload, &created, &out.Attempts, &out.Status, &retryAt, &out.LastError, &completedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out.CreatedAt = parseTime(created)
+	out.RetryAt = parseTime(retryAt)
+	out.Completed = parseTime(completedAt)
+	return &out, nil
+}
+
+func parseTime(raw string) time.Time {
+	if raw == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return t
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 func (s *Store) AddConflictIfMissing(path, reason, localPath, remoteRev string) (int64, bool, error) {

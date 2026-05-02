@@ -12,6 +12,7 @@ Implemented:
 - Dropbox paginated `ListFolderAll` helper added with mock API tests.
 - `sync --once --dry-run --remote` now fetches remote Dropbox metadata and records remote-scanned entries/cursor without mutating local or remote files.
 - Dry-run reconciliation now builds explicit upload/download/conflict plans from local scan plus remote metadata and records them as deduplicated pending ops/conflicts.
+- Durable worker queue processor added under `internal/worker` with injectable local handlers, retry/backoff scheduling, Retry-After support, success completion, and terminal failure state.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -19,9 +20,13 @@ Safety:
 - Sync remains dry-run/scaffolded until live auth and reconciliation are reviewed.
 
 Next:
-1. Add worker queue processor with retry/backoff semantics.
+1. Wire upload/download handlers into the queue processor behind dry-run/local safety gates.
 2. Validate OAuth/token handling against a non-production Dropbox test folder.
 3. Add a non-production Dropbox fixture/integration pass for dry-run plan counts.
+
+Validation:
+- `gofmt` completed.
+- `go test ./...` passed.
 
 ## ACFS integration
 
