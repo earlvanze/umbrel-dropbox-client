@@ -24,6 +24,7 @@ Implemented:
 - `doctor` CLI added to validate DB initialization, sync root, token file hygiene, Dropbox DNS, and local state summary.
 - Deterministic dry-run integration fixture added for local scan + remote metadata reconciliation + queue/conflict persistence counts.
 - Remote cursor helpers added: Dropbox latest-cursor API, remote metadata application helper, and tests for file-only state ingestion.
+- Remote delta ingestion loop added with stored cursor resume, paginated continue handling, file metadata application, cursor persistence, audit events, and tests.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -32,7 +33,7 @@ Safety:
 
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
-2. Add remote delta cursor incremental ingestion loop/tests using stored cursors.
+2. Wire remote delta ingestion into daemon/CLI dry-run cycle with token-file support.
 3. Add end-to-end dry-run CLI fixture command tests.
 
 Validation:
