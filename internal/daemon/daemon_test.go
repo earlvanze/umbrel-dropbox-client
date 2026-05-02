@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/earl/umbrel-dropbox-sync/internal/config"
 	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
@@ -171,4 +172,44 @@ func TestRunCycleIngestsRemoteDeltaWhenConfigured(t *testing.T) {
 	if cursor != "c1" {
 		t.Fatalf("cursor=%q", cursor)
 	}
+}
+
+func TestRunTriggersCycleFromWatcherEvent(t *testing.T) {
+	root := t.TempDir()
+	s := testStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	d := New(config.Config{Root: root, DryRun: true, Watch: true, WatchDebounceMs: 50, ScanIntervalSeconds: 3600, HealthAddr: ""}, s, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+	waitForEntries(t, s, 0)
+	if err := os.WriteFile(filepath.Join(root, "watched.txt"), []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	waitForEntries(t, s, 1)
+	cancel()
+	select {
+	case err := <-done:
+		if err != context.Canceled {
+			t.Fatalf("run err=%v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("daemon did not stop")
+	}
+}
+
+func waitForEntries(t *testing.T, s *state.Store, want int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		st, err := s.Status()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Entries == want {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	st, _ := s.Status()
+	t.Fatalf("entries=%d want=%d", st.Entries, want)
 }

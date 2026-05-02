@@ -13,6 +13,7 @@ import (
 	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
 	"github.com/earl/umbrel-dropbox-sync/internal/scan"
 	"github.com/earl/umbrel-dropbox-sync/internal/state"
+	"github.com/earl/umbrel-dropbox-sync/internal/watch"
 	"github.com/earl/umbrel-dropbox-sync/internal/worker"
 )
 
@@ -57,15 +58,48 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	watchEvents, stopWatch := d.startWatcher(ctx)
+	defer stopWatch()
+	debounce := d.watchDebounce()
+	var debounceTimer *time.Timer
+	var debounceC <-chan time.Time
 	for {
 		select {
 		case <-ctx.Done():
+			if debounceTimer != nil {
+				debounceTimer.Stop()
+			}
 			_ = d.store.Event("daemon.stop", ctx.Err().Error())
 			return ctx.Err()
 		case <-ticker.C:
 			if _, err := d.RunCycle(ctx); err != nil {
 				_ = d.store.Event("daemon.error", err.Error())
 				d.log.Error("sync cycle failed", "error", err)
+			}
+		case ev, ok := <-watchEvents:
+			if !ok {
+				watchEvents = nil
+				continue
+			}
+			_ = d.store.Event("daemon.watch", ev.Path)
+			if debounceTimer == nil {
+				debounceTimer = time.NewTimer(debounce)
+				debounceC = debounceTimer.C
+			} else {
+				if !debounceTimer.Stop() {
+					select {
+					case <-debounceTimer.C:
+					default:
+					}
+				}
+				debounceTimer.Reset(debounce)
+			}
+		case <-debounceC:
+			debounceC = nil
+			debounceTimer = nil
+			if _, err := d.RunCycle(ctx); err != nil {
+				_ = d.store.Event("daemon.error", err.Error())
+				d.log.Error("watch-triggered sync cycle failed", "error", err)
 			}
 		}
 	}
@@ -211,4 +245,25 @@ func (d *Daemon) ingestRemoteDelta(ctx context.Context) (state.RemoteDeltaStats,
 		client = dropbox.New(tok.AccessToken)
 	}
 	return d.store.IngestRemoteDelta(ctx, client, d.cfg.RemotePath)
+}
+
+func (d *Daemon) startWatcher(ctx context.Context) (<-chan watch.Event, func()) {
+	if !d.cfg.Watch {
+		return nil, func() {}
+	}
+	w, err := watch.New(d.cfg.Root, watch.DefaultOptions())
+	if err != nil {
+		_ = d.store.Event("daemon.watch_error", err.Error())
+		d.log.Error("filesystem watcher disabled", "error", err)
+		return nil, func() {}
+	}
+	d.log.Info("filesystem watcher started", "root", d.cfg.Root)
+	return w.Events(ctx), func() { _ = w.Close() }
+}
+
+func (d *Daemon) watchDebounce() time.Duration {
+	if d.cfg.WatchDebounceMs <= 0 {
+		return 1500 * time.Millisecond
+	}
+	return time.Duration(d.cfg.WatchDebounceMs) * time.Millisecond
 }
