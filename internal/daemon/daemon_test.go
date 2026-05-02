@@ -1,0 +1,63 @@
+package daemon
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/earl/umbrel-dropbox-sync/internal/config"
+	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
+	"github.com/earl/umbrel-dropbox-sync/internal/state"
+)
+
+func TestRunCycleScansLocalFilesAndProcessesDryRunQueue(t *testing.T) {
+	root := t.TempDir()
+	local := filepath.Join(root, "a.txt")
+	if err := os.WriteFile(local, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := testStore(t)
+	if _, err := s.EnqueueOp("upload_local", "/a.txt", reconcile.PlannedOp{Op: "upload_local", Path: "/a.txt", LocalPath: local, Reason: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: root, DryRun: true, UploadWorkers: 1, DownloadWorkers: 1}, s, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	stats, err := d.RunCycle(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.LocalFiles != 1 || stats.WorkerProcessed != 1 || stats.WorkerCompleted != 1 || stats.WorkerFailed != 0 {
+		t.Fatalf("stats=%#v", stats)
+	}
+	st, err := s.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Entries != 1 || st.PendingOps != 0 || st.LastEvent == "" {
+		t.Fatalf("status=%#v", st)
+	}
+}
+
+func TestRunCycleRejectsLiveDaemonMode(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), DryRun: false}, s, nil)
+	_, err := d.RunCycle(context.Background())
+	if err == nil {
+		t.Fatal("expected live mode error")
+	}
+}
+
+func testStore(t *testing.T) *state.Store {
+	t.Helper()
+	s, err := state.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}

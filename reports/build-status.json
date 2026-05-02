@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: guarded live worker CLI wired",
+  "status": "production foundation milestone 3 advanced: daemon dry-run cycle wired",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -20,15 +20,16 @@
     "Dropbox OAuth device-code and refresh-token client scaffold with mock HTTP tests and CLI login command",
     "Dropbox content upload/download client methods with mock tests for API args, auth headers, upload body handling, and atomic download writes",
     "guarded live transfer worker handler with explicit AllowLive gate, root containment checks, upload hash revalidation, no-overwrite downloads, and state entry updates",
-    "worker CLI guarded live mode with --live --i-understand-risk gates, token-file/env access token loading, and configured/overridden sync root"
+    "worker CLI guarded live mode with --live --i-understand-risk gates, token-file/env access token loading, and configured/overridden sync root",
+    "daemon dry-run cycle scans local files, upserts entries, processes dry-run queue work, records audit events, and refuses daemon live mode"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
-    "wire guarded live worker mode into daemon after non-production auth validation",
+    "add pause/resume and health/status endpoints for daemon operations",
     "validate OAuth device-code flow against a non-production Dropbox test folder",
     "continue production sync engine implementation",
     "add non-production Dropbox fixture/integration pass for dry-run plan counts"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T14:45:00Z"
+  "last_test": "go test ./... passed @ 2026-05-02T15:00:00Z"
 }
