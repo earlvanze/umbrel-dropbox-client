@@ -46,7 +46,7 @@ Commands:
   status [--db PATH]
   hash PATH
   remote-account --token-env DROPBOX_TOKEN
-  sync --once --dry-run [--db PATH] [--root PATH]
+  sync --once --dry-run [--db PATH] [--root PATH] [--remote] [--remote-path PATH] [--token-env DROPBOX_TOKEN]
 
 MVP scaffold. Uses DROPBOX_TOKEN or --token-env for API calls.`)
 }
@@ -118,6 +118,9 @@ func cmdSync(args []string) {
 	once := fs.Bool("once", true, "run one sync cycle")
 	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
 	rootFlag := fs.String("root", "", "local sync root override")
+	remote := fs.Bool("remote", false, "also fetch Dropbox remote metadata for dry-run reconciliation")
+	remotePath := fs.String("remote-path", "", "Dropbox remote path to list")
+	tokenEnv := fs.String("token-env", "DROPBOX_TOKEN", "environment variable containing Dropbox token")
 	_ = fs.Parse(args)
 	if !*once {
 		fatal("continuous sync is not enabled yet; use --once")
@@ -150,8 +153,39 @@ func cmdSync(args []string) {
 			State:       "local_scanned",
 		}))
 	}
-	must(s.Event("sync.dry_run.local_scan", fmt.Sprintf("root=%s files=%d", root, len(files))))
-	fmt.Printf("dry-run local scan complete: root=%s files=%d db=%s\n", root, len(files), *db)
+	remoteFiles := 0
+	if *remote {
+		token := os.Getenv(*tokenEnv)
+		if token == "" {
+			fatal("missing token env %s for --remote", *tokenEnv)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		entries, cursor, err := dropbox.New(token).ListFolderAll(ctx, *remotePath, true)
+		must(err)
+		for _, e := range entries {
+			if e.Tag != "file" {
+				continue
+			}
+			path := e.PathLower
+			if path == "" {
+				path = e.PathDisplay
+			}
+			must(s.UpsertEntry(state.Entry{
+				Path:        path,
+				DropboxID:   e.ID,
+				Rev:         e.Rev,
+				ContentHash: e.ContentHash,
+				Size:        e.Size,
+				MTime:       e.ServerMtime,
+				State:       "remote_scanned",
+			}))
+			remoteFiles++
+		}
+		must(s.SetConfig("dropbox_cursor", cursor))
+	}
+	must(s.Event("sync.dry_run.scan", fmt.Sprintf("root=%s local_files=%d remote_files=%d", root, len(files), remoteFiles)))
+	fmt.Printf("dry-run scan complete: root=%s local_files=%d remote_files=%d db=%s\n", root, len(files), remoteFiles, *db)
 }
 
 func must(err error) {

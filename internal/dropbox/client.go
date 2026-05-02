@@ -10,12 +10,23 @@ import (
 )
 
 type Client struct {
-	token string
-	http  *http.Client
+	token  string
+	http   *http.Client
+	apiURL string
 }
 
 func New(token string) *Client {
-	return &Client{token: token, http: &http.Client{Timeout: 60 * time.Second}}
+	return NewWithHTTP(token, &http.Client{Timeout: 60 * time.Second}, "https://api.dropboxapi.com/2")
+}
+
+func NewWithHTTP(token string, httpClient *http.Client, apiURL string) *Client {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 60 * time.Second}
+	}
+	if apiURL == "" {
+		apiURL = "https://api.dropboxapi.com/2"
+	}
+	return &Client{token: token, http: httpClient, apiURL: apiURL}
 }
 
 type Account struct {
@@ -47,7 +58,7 @@ type ListFolderResult struct {
 
 func (c *Client) CurrentAccount(ctx context.Context) (*Account, error) {
 	var out Account
-	if err := c.rpc(ctx, "https://api.dropboxapi.com/2/users/get_current_account", map[string]any{}, &out); err != nil {
+	if err := c.rpc(ctx, c.apiURL+"/users/get_current_account", map[string]any{}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -64,7 +75,7 @@ func (c *Client) ListFolder(ctx context.Context, path string, recursive bool) (*
 		"include_mounted_folders":             true,
 		"include_non_downloadable_files":      false,
 	}
-	if err := c.rpc(ctx, "https://api.dropboxapi.com/2/files/list_folder", in, &out); err != nil {
+	if err := c.rpc(ctx, c.apiURL+"/files/list_folder", in, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -72,10 +83,28 @@ func (c *Client) ListFolder(ctx context.Context, path string, recursive bool) (*
 
 func (c *Client) ListFolderContinue(ctx context.Context, cursor string) (*ListFolderResult, error) {
 	var out ListFolderResult
-	if err := c.rpc(ctx, "https://api.dropboxapi.com/2/files/list_folder/continue", map[string]any{"cursor": cursor}, &out); err != nil {
+	if err := c.rpc(ctx, c.apiURL+"/files/list_folder/continue", map[string]any{"cursor": cursor}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+func (c *Client) ListFolderAll(ctx context.Context, path string, recursive bool) ([]Metadata, string, error) {
+	page, err := c.ListFolder(ctx, path, recursive)
+	if err != nil {
+		return nil, "", err
+	}
+	entries := append([]Metadata{}, page.Entries...)
+	cursor := page.Cursor
+	for page.HasMore {
+		page, err = c.ListFolderContinue(ctx, cursor)
+		if err != nil {
+			return nil, cursor, err
+		}
+		entries = append(entries, page.Entries...)
+		cursor = page.Cursor
+	}
+	return entries, cursor, nil
 }
 
 func (c *Client) rpc(ctx context.Context, url string, in any, out any) error {

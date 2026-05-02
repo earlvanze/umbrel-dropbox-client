@@ -1,7 +1,7 @@
 {
-  "status": "production foundation milestone 2 in progress",
+  "status": "production foundation milestone 3 in progress",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
-  "latest_commit": "pending",
+  "latest_commit": "f463a65",
   "implemented": [
     "local ACFS reference clone under workspace/external",
     "ACFS installer checksum notification workflow for scripts/install-linux.sh",
@@ -9,14 +9,16 @@
     "docs/ACFS.md integration notes",
     "README link to ACFS integration docs",
     "sync --once --dry-run now scans local root and upserts state entries",
-    "Dropbox list_folder/list_folder/continue client methods added"
+    "Dropbox list_folder/list_folder/continue client methods added",
+    "Dropbox paginated ListFolderAll helper with mock API tests",
+    "sync --once --dry-run --remote fetches remote Dropbox metadata and records remote-scanned entries/cursor without file mutations"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
-    "wire remote Dropbox listing into dry-run reconciliation",
     "add worker queue processor with retry/backoff semantics",
     "validate OAuth/token handling against a non-production Dropbox test folder",
-    "continue production sync engine implementation"
+    "continue production sync engine implementation",
+    "expand dry-run reconciliation into explicit upload/download/conflict plans"
   ]
 }
