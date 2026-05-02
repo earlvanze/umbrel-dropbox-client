@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/earl/umbrel-dropbox-sync/internal/auth"
@@ -49,6 +50,8 @@ func main() {
 		cmdAuth(os.Args[2:])
 	case "remote-account":
 		cmdRemoteAccount(os.Args[2:])
+	case "smoke-test":
+		cmdSmokeTest(os.Args[2:])
 	case "sync":
 		cmdSync(os.Args[2:])
 	case "worker":
@@ -77,6 +80,7 @@ Commands:
   auth device-code --client-id APP_KEY [--token-file PATH]
   remote-account --token-env DROPBOX_TOKEN
   sync --once --dry-run [--db PATH] [--root PATH] [--remote|--remote-delta] [--remote-path PATH] [--token-file PATH|--token-env DROPBOX_TOKEN]
+  smoke-test --dry-run|--live --remote-path PATH [--token-file PATH|--token-env DROPBOX_TOKEN] [--i-understand-risk]
   worker --once --dry-run [--db PATH] [--limit N]
   worker --once --live --i-understand-risk [--db PATH] [--root PATH] [--limit N] [--token-file PATH|--token-env DROPBOX_TOKEN]
 
@@ -515,6 +519,84 @@ func cmdSync(args []string) {
 	}
 	must(s.Event("sync.dry_run.scan", fmt.Sprintf("root=%s local_files=%d remote_files=%d planned_ops=%d conflicts=%d noop=%d", root, len(files), remoteFiles, planOps, planConflicts, planNoop)))
 	fmt.Printf("dry-run scan complete: root=%s local_files=%d remote_files=%d planned_ops=%d conflicts=%d noop=%d db=%s\n", root, len(files), remoteFiles, planOps, planConflicts, planNoop, *db)
+}
+
+func cmdSmokeTest(args []string) {
+	fs := flag.NewFlagSet("smoke-test", flag.ExitOnError)
+	dry := fs.Bool("dry-run", false, "run without Dropbox/local destructive writes")
+	live := fs.Bool("live", false, "upload a throwaway file to Dropbox")
+	ackRisk := fs.Bool("i-understand-risk", false, "required with --live")
+	remotePath := fs.String("remote-path", "/OpenClaw-Smoke-Test", "Dropbox throwaway folder/path prefix")
+	tokenEnv := fs.String("token-env", "DROPBOX_TOKEN", "environment variable containing Dropbox token")
+	tokenFile := fs.String("token-file", "", "secure token file path")
+	_ = fs.Parse(args)
+	if *dry && *live {
+		fatal("choose exactly one mode: --dry-run or --live")
+	}
+	if !*dry && !*live {
+		fatal("smoke-test requires --dry-run unless --live is explicitly enabled")
+	}
+	if *live && !*ackRisk {
+		fatal("live smoke-test requires --i-understand-risk")
+	}
+	root := mustTempDir("umbrel-dropbox-sync-smoke-root-*")
+	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	must(os.MkdirAll(filepath.Dir(db), 0700))
+	local := filepath.Join(root, "smoke.txt")
+	body := []byte("umbrel-dropbox-sync smoke test\n")
+	must(os.WriteFile(local, body, 0600))
+	s, err := state.Open(db)
+	must(err)
+	defer s.Close()
+	must(s.Init())
+	must(s.SetConfig("root", root))
+	files, err := scan.Walk(root, scan.DefaultOptions())
+	must(err)
+	if len(files) != 1 {
+		fatal("expected 1 smoke file, got %d", len(files))
+	}
+	dropboxPath := pathJoinDropbox(*remotePath, "smoke.txt")
+	planned := reconcile.PlannedOp{Op: "upload_local", Path: dropboxPath, LocalPath: local, ContentHash: files[0].ContentHash, Size: files[0].Size, Reason: "smoke test upload"}
+	_, created, err := s.EnqueueOpIfMissing(planned.Op, planned.Path, planned)
+	must(err)
+	if !created {
+		fatal("smoke op unexpectedly already existed")
+	}
+	if *dry {
+		p := worker.Processor{Store: s, Handler: worker.DryRunHandler{Store: s}}
+		res, err := p.ProcessOne(context.Background())
+		must(err)
+		if !res.Processed || !res.Completed || res.Failed {
+			fatal("dry-run smoke worker failed: processed=%v completed=%v failed=%v", res.Processed, res.Completed, res.Failed)
+		}
+		fmt.Printf("smoke-test dry-run ok: root=%s db=%s path=%s\n", root, db, dropboxPath)
+		return
+	}
+	token := loadAccessToken(*tokenFile, *tokenEnv)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	p := worker.Processor{Store: s, Handler: worker.TransferHandler{Store: s, Client: dropbox.New(token), Root: root, AllowLive: true}}
+	res, err := p.ProcessOne(ctx)
+	must(err)
+	if !res.Processed || !res.Completed || res.Failed {
+		fatal("live smoke worker failed: processed=%v completed=%v failed=%v", res.Processed, res.Completed, res.Failed)
+	}
+	fmt.Printf("smoke-test live upload ok: root=%s db=%s path=%s\n", root, db, dropboxPath)
+}
+
+func mustTempDir(pattern string) string {
+	path, err := os.MkdirTemp("", pattern)
+	must(err)
+	return path
+}
+
+func pathJoinDropbox(base, name string) string {
+	base = filepath.ToSlash(base)
+	if base == "" || base == "." || base == "/" {
+		return "/" + name
+	}
+	base = "/" + strings.Trim(strings.TrimSpace(base), "/")
+	return base + "/" + strings.TrimLeft(name, "/")
 }
 
 func cmdWorker(args []string) {

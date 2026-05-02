@@ -33,6 +33,7 @@ Implemented:
 - Guarded delete review planning added: missing tombstones can enqueue non-destructive `review_*_delete` ops only, never `delete_local` or `delete_remote`.
 - Inotify/fsnotify watcher foundation added with recursive directory registration, dynamic subdirectory watching, and ignored state-directory filtering tests.
 - Watcher events wired into daemon scheduling with debounce; watch-triggered cycles are tested end-to-end.
+- `smoke-test` CLI added for throwaway dry-run and explicitly gated live Dropbox upload validation against a provided remote path.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -42,7 +43,7 @@ Safety:
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
 2. Add explicit reviewed delete execution gates after manual tombstone policy approval.
-3. Add real Dropbox dry-run/live smoke test harness for a throwaway folder.
+3. Run `smoke-test --live --i-understand-risk` against a non-production Dropbox test folder after OAuth is validated.
 
 Validation:
 - `gofmt` completed.

@@ -154,3 +154,32 @@ func TestCLIMissingLocalFixture(t *testing.T) {
 		t.Fatalf("op=%#v", op)
 	}
 }
+
+func TestCLISmokeTestDryRunFixture(t *testing.T) {
+	out := captureStdout(t, func() { cmdSmokeTest([]string{"--dry-run", "--remote-path", "/OpenClaw-Test"}) })
+	if !strings.Contains(out, "smoke-test dry-run ok:") || !strings.Contains(out, "path=/OpenClaw-Test/smoke.txt") {
+		t.Fatalf("smoke output=%q", out)
+	}
+	fields := strings.Fields(out)
+	var db string
+	for _, field := range fields {
+		if strings.HasPrefix(field, "db=") {
+			db = strings.TrimPrefix(field, "db=")
+		}
+	}
+	if db == "" {
+		t.Fatalf("db path missing from output=%q", out)
+	}
+	s, err := state.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	st, err := s.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PendingOps != 0 || st.Entries != 0 {
+		t.Fatalf("status=%#v", st)
+	}
+}
