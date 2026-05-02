@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: Dropbox content transfer client added",
+  "status": "production foundation milestone 3 advanced: guarded transfer worker handler added",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -18,15 +18,16 @@
     "dry-run worker CLI validates queued upload/download plans and completes safe local-only operations without touching Dropbox or local files",
     "secure local token file storage with 0600 permissions, redacted auth status, env-token import, and OAuth device-code CLI scaffold",
     "Dropbox OAuth device-code and refresh-token client scaffold with mock HTTP tests and CLI login command",
-    "Dropbox content upload/download client methods with mock tests for API args, auth headers, upload body handling, and atomic download writes"
+    "Dropbox content upload/download client methods with mock tests for API args, auth headers, upload body handling, and atomic download writes",
+    "guarded live transfer worker handler with explicit AllowLive gate, root containment checks, upload hash revalidation, no-overwrite downloads, and state entry updates"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
-    "wire guarded real upload/download transfer handlers into worker queue after non-production auth validation",
+    "wire guarded live worker mode into CLI/daemon after non-production auth validation",
     "validate OAuth device-code flow against a non-production Dropbox test folder",
     "continue production sync engine implementation",
     "add non-production Dropbox fixture/integration pass for dry-run plan counts"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T14:25:00Z"
+  "last_test": "go test ./... passed @ 2026-05-02T14:35:00Z"
 }

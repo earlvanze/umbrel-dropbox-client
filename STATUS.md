@@ -16,6 +16,7 @@ Implemented:
 - Dry-run worker CLI added to validate queued upload/download plans and complete safe local-only operations without touching Dropbox or local files.
 - Secure local token file storage added with private `0600` permissions, redacted auth status, env-token import, and Dropbox OAuth device-code CLI scaffold.
 - Dropbox content upload/download client methods added with mock tests for API args, auth, upload body handling, and atomic download writes.
+- Guarded live transfer worker handler added with explicit `AllowLive` gate, sync-root containment checks, upload hash revalidation, no-overwrite downloads, and state entry updates.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -24,7 +25,7 @@ Safety:
 
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
-2. Wire guarded real upload/download transfer handlers into worker queue after non-production auth validation.
+2. Wire guarded live worker mode into CLI/daemon after non-production auth validation.
 3. Add a non-production Dropbox fixture/integration pass for dry-run plan counts.
 
 Validation:
