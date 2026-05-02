@@ -13,6 +13,7 @@ import (
 	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
 	"github.com/earl/umbrel-dropbox-sync/internal/scan"
 	"github.com/earl/umbrel-dropbox-sync/internal/state"
+	"github.com/earl/umbrel-dropbox-sync/internal/worker"
 )
 
 const defaultDB = ".umbrel-dropbox-sync/state.db"
@@ -33,6 +34,8 @@ func main() {
 		cmdRemoteAccount(os.Args[2:])
 	case "sync":
 		cmdSync(os.Args[2:])
+	case "worker":
+		cmdWorker(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -48,6 +51,7 @@ Commands:
   hash PATH
   remote-account --token-env DROPBOX_TOKEN
   sync --once --dry-run [--db PATH] [--root PATH] [--remote] [--remote-path PATH] [--token-env DROPBOX_TOKEN]
+  worker --once --dry-run [--db PATH] [--limit N]
 
 MVP scaffold. Uses DROPBOX_TOKEN or --token-env for API calls.`)
 }
@@ -208,6 +212,46 @@ func cmdSync(args []string) {
 	}
 	must(s.Event("sync.dry_run.scan", fmt.Sprintf("root=%s local_files=%d remote_files=%d planned_ops=%d conflicts=%d noop=%d", root, len(files), remoteFiles, planOps, planConflicts, planNoop)))
 	fmt.Printf("dry-run scan complete: root=%s local_files=%d remote_files=%d planned_ops=%d conflicts=%d noop=%d db=%s\n", root, len(files), remoteFiles, planOps, planConflicts, planNoop, *db)
+}
+
+func cmdWorker(args []string) {
+	fs := flag.NewFlagSet("worker", flag.ExitOnError)
+	dry := fs.Bool("dry-run", true, "validate and complete queued work without local or remote writes")
+	once := fs.Bool("once", true, "process ready queue items once")
+	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
+	limit := fs.Int("limit", 1, "maximum ready operations to process")
+	_ = fs.Parse(args)
+	if !*once {
+		fatal("continuous worker mode is not enabled yet; use --once")
+	}
+	if !*dry {
+		fatal("live worker mode is not enabled yet; use --dry-run")
+	}
+	if *limit < 1 {
+		fatal("limit must be >= 1")
+	}
+	s, err := state.Open(*db)
+	must(err)
+	defer s.Close()
+	must(s.Init())
+	p := worker.Processor{Store: s, Handler: worker.DryRunHandler{Store: s}}
+	processed, completed, failed := 0, 0, 0
+	for processed < *limit {
+		res, err := p.ProcessOne(context.Background())
+		must(err)
+		if !res.Processed {
+			break
+		}
+		processed++
+		if res.Completed {
+			completed++
+		}
+		if res.Failed {
+			failed++
+		}
+	}
+	must(s.Event("worker.dry_run.batch", fmt.Sprintf("processed=%d completed=%d failed=%d limit=%d", processed, completed, failed, *limit)))
+	fmt.Printf("dry-run worker complete: processed=%d completed=%d failed=%d db=%s\n", processed, completed, failed, *db)
 }
 
 func must(err error) {

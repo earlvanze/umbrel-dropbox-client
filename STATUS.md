@@ -13,6 +13,7 @@ Implemented:
 - `sync --once --dry-run --remote` now fetches remote Dropbox metadata and records remote-scanned entries/cursor without mutating local or remote files.
 - Dry-run reconciliation now builds explicit upload/download/conflict plans from local scan plus remote metadata and records them as deduplicated pending ops/conflicts.
 - Durable worker queue processor added under `internal/worker` with injectable local handlers, retry/backoff scheduling, Retry-After support, success completion, and terminal failure state.
+- Dry-run worker CLI added to validate queued upload/download plans and complete safe local-only operations without touching Dropbox or local files.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -20,7 +21,7 @@ Safety:
 - Sync remains dry-run/scaffolded until live auth and reconciliation are reviewed.
 
 Next:
-1. Wire upload/download handlers into the queue processor behind dry-run/local safety gates.
+1. Replace dry-run worker handler with guarded real upload/download transfer handlers after non-production auth validation.
 2. Validate OAuth/token handling against a non-production Dropbox test folder.
 3. Add a non-production Dropbox fixture/integration pass for dry-run plan counts.
 
