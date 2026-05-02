@@ -32,7 +32,7 @@ func TestRunCycleScansLocalFilesAndProcessesDryRunQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.LocalFiles != 1 || stats.WorkerProcessed != 1 || stats.WorkerCompleted != 1 || stats.WorkerFailed != 0 {
+	if stats.LocalFiles != 1 || stats.LocalMissing != 0 || stats.WorkerProcessed != 1 || stats.WorkerCompleted != 1 || stats.WorkerFailed != 0 {
 		t.Fatalf("stats=%#v", stats)
 	}
 	st, err := s.Status()
@@ -41,6 +41,29 @@ func TestRunCycleScansLocalFilesAndProcessesDryRunQueue(t *testing.T) {
 	}
 	if st.Entries != 1 || st.PendingOps != 0 || st.LastEvent == "" {
 		t.Fatalf("status=%#v", st)
+	}
+}
+
+func TestRunCycleMarksPreviouslySeenLocalFilesMissing(t *testing.T) {
+	root := t.TempDir()
+	s := testStore(t)
+	if err := s.UpsertEntry(state.Entry{Path: "/missing.txt", ContentHash: "old", State: "clean"}); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: root, DryRun: true}, s, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	stats, err := d.RunCycle(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.LocalMissing != 1 {
+		t.Fatalf("stats=%#v", stats)
+	}
+	items, err := s.ListMissingLocal(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Path != "/missing.txt" {
+		t.Fatalf("items=%#v", items)
 	}
 }
 

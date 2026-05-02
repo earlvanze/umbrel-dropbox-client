@@ -29,6 +29,7 @@ Implemented:
 - End-to-end CLI fixture tests added for init + dry-run sync + status and pause/resume flows.
 - Packaged install/service smoke coverage added: `init --config` writes daemon config, install script initializes config, service path/goreleaser packaging checked, and both binaries build in test.
 - Conflict-management CLI added: `conflicts` lists conflict records and `resolve-conflict --id` marks one resolved with an audit event.
+- Local tombstone safeguards added: daemon marks previously known local files as `local_missing` when absent from a scan, without deleting local or remote files; `missing-local` CLI lists them.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -37,7 +38,7 @@ Safety:
 
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
-2. Add local delete/tombstone detection and reconciliation safeguards.
+2. Add guarded delete planning/resolution policy after tombstone review.
 3. Validate OAuth device-code flow against a non-production Dropbox test folder.
 
 Validation:

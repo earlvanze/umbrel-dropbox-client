@@ -33,6 +33,7 @@ type CycleStats struct {
 	RemotePages        int
 	RemoteEntries      int
 	RemoteAppliedFiles int
+	LocalMissing       int
 }
 
 func New(cfg config.Config, store *state.Store, logger *slog.Logger) *Daemon {
@@ -146,14 +147,20 @@ func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 	if err != nil {
 		return CycleStats{}, err
 	}
+	seen := make(map[string]bool, len(files))
 	for _, f := range files {
+		seen[scan.DropboxPath(f.Path)] = true
 		if err := d.store.UpsertEntry(state.Entry{Path: scan.DropboxPath(f.Path), ContentHash: f.ContentHash, Size: f.Size, MTime: f.ModTime, State: "local_scanned"}); err != nil {
 			return CycleStats{}, err
 		}
 	}
+	missing, err := d.store.MarkMissingLocal(seen)
+	if err != nil {
+		return CycleStats{}, err
+	}
 	limit := d.workerLimit()
 	p := worker.Processor{Store: d.store, Handler: worker.DryRunHandler{Store: d.store}}
-	stats := CycleStats{Root: d.cfg.Root, LocalFiles: len(files), WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles}
+	stats := CycleStats{Root: d.cfg.Root, LocalFiles: len(files), WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles, LocalMissing: missing}
 	for stats.WorkerProcessed < limit {
 		res, err := p.ProcessOne(ctx)
 		if err != nil {
@@ -170,10 +177,10 @@ func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 			stats.WorkerFailed++
 		}
 	}
-	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s local_files=%d remote_entries=%d remote_applied_files=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, stats.LocalFiles, stats.RemoteEntries, stats.RemoteAppliedFiles, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
+	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s local_files=%d local_missing=%d remote_entries=%d remote_applied_files=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, stats.LocalFiles, stats.LocalMissing, stats.RemoteEntries, stats.RemoteAppliedFiles, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
 		return stats, err
 	}
-	d.log.Info("sync cycle complete", "root", stats.Root, "local_files", stats.LocalFiles, "remote_entries", stats.RemoteEntries, "remote_applied_files", stats.RemoteAppliedFiles, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
+	d.log.Info("sync cycle complete", "root", stats.Root, "local_files", stats.LocalFiles, "local_missing", stats.LocalMissing, "remote_entries", stats.RemoteEntries, "remote_applied_files", stats.RemoteAppliedFiles, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
 	return stats, nil
 }
 

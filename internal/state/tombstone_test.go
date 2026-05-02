@@ -1,0 +1,41 @@
+package state
+
+import (
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func TestMarkMissingLocalAndList(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []Entry{
+		{Path: "/kept.txt", ContentHash: "h1", Size: 1, MTime: time.Now(), State: "local_scanned"},
+		{Path: "/missing.txt", DropboxID: "id:m", Rev: "r1", ContentHash: "h2", Size: 2, MTime: time.Now(), State: "clean"},
+		{Path: "/remote.txt", ContentHash: "h3", Size: 3, MTime: time.Now(), State: "remote_scanned"},
+	} {
+		if err := s.UpsertEntry(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count, err := s.MarkMissingLocal(map[string]bool{"/kept.txt": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("count=%d", count)
+	}
+	items, err := s.ListMissingLocal(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Path != "/missing.txt" || items[0].Rev != "r1" || items[0].State != "local_missing" {
+		t.Fatalf("items=%#v", items)
+	}
+}

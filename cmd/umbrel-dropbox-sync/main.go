@@ -33,6 +33,8 @@ func main() {
 		cmdStatus(os.Args[2:])
 	case "doctor":
 		cmdDoctor(os.Args[2:])
+	case "missing-local":
+		cmdMissingLocal(os.Args[2:])
 	case "conflicts":
 		cmdConflicts(os.Args[2:])
 	case "resolve-conflict":
@@ -63,6 +65,7 @@ func usage() {
 Commands:
   init --root PATH [--db PATH] [--config PATH]
   status [--db PATH]
+  missing-local [--db PATH] [--limit N]
   conflicts [--db PATH] [--limit N]
   resolve-conflict --id ID [--note TEXT] [--db PATH]
   doctor [--db PATH] [--root PATH] [--token-file PATH]
@@ -204,6 +207,26 @@ func cmdDoctor(args []string) {
 		os.Exit(1)
 	}
 	fmt.Println("doctor: ok")
+}
+
+func cmdMissingLocal(args []string) {
+	fs := flag.NewFlagSet("missing-local", flag.ExitOnError)
+	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
+	limit := fs.Int("limit", 50, "maximum missing local entries to list")
+	_ = fs.Parse(args)
+	s, err := state.Open(*db)
+	must(err)
+	defer s.Close()
+	must(s.Init())
+	items, err := s.ListMissingLocal(*limit)
+	must(err)
+	if len(items) == 0 {
+		fmt.Println("missing-local: none")
+		return
+	}
+	for _, item := range items {
+		fmt.Printf("path=%s rev=%s content_hash=%s size=%d state=%s\n", item.Path, item.Rev, item.ContentHash, item.Size, item.State)
+	}
 }
 
 func cmdConflicts(args []string) {

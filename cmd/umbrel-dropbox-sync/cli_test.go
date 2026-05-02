@@ -121,3 +121,23 @@ func TestCLIConflictsAndResolveFixture(t *testing.T) {
 		t.Fatalf("empty conflicts output=%q", out)
 	}
 }
+
+func TestCLIMissingLocalFixture(t *testing.T) {
+	root := t.TempDir()
+	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	captureStdout(t, func() { cmdInit([]string{"--root", root, "--db", db}) })
+	s, err := state.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertEntry(state.Entry{Path: "/missing.txt", Rev: "r1", ContentHash: "h1", Size: 5, State: "local_missing"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() { cmdMissingLocal([]string{"--db", db}) })
+	if !strings.Contains(out, "path=/missing.txt") || !strings.Contains(out, "state=local_missing") {
+		t.Fatalf("missing-local output=%q", out)
+	}
+}

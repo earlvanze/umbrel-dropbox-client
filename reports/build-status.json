@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: conflict management CLI added",
+  "status": "production foundation milestone 3 advanced: local tombstone safeguards added",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -31,13 +31,14 @@
     "remote delta ingestion wired into daemon dry-run cycles and CLI sync --remote-delta with token-file support",
     "end-to-end CLI fixture tests for init, dry-run sync, status, pause, and resume flows",
     "packaged install/service smoke coverage for init --config daemon config, install script config initialization, systemd/goreleaser paths, and binary builds",
-    "conflict-management CLI for listing conflict records and resolving by id with audit events"
+    "conflict-management CLI for listing conflict records and resolving by id with audit events",
+    "local tombstone safeguards for marking previously known local files as local_missing without deleting files, plus missing-local CLI"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
     "validate OAuth device-code flow against a non-production Dropbox test folder",
-    "add local delete/tombstone detection and reconciliation safeguards"
+    "add guarded delete planning/resolution policy after tombstone review"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T18:15:00Z"
+  "last_test": "go test ./... passed @ 2026-05-02T18:25:00Z"
 }
