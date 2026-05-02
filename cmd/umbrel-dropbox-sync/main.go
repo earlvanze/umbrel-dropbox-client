@@ -65,7 +65,7 @@ func usage() {
 Commands:
   init --root PATH [--db PATH] [--config PATH]
   status [--db PATH]
-  missing-local [--db PATH] [--limit N]
+  missing-local [--db PATH] [--limit N] [--enqueue-review]
   conflicts [--db PATH] [--limit N]
   resolve-conflict --id ID [--note TEXT] [--db PATH]
   doctor [--db PATH] [--root PATH] [--token-file PATH]
@@ -213,6 +213,7 @@ func cmdMissingLocal(args []string) {
 	fs := flag.NewFlagSet("missing-local", flag.ExitOnError)
 	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
 	limit := fs.Int("limit", 50, "maximum missing local entries to list")
+	enqueueReview := fs.Bool("enqueue-review", false, "enqueue non-destructive review ops for missing local tombstones")
 	_ = fs.Parse(args)
 	s, err := state.Open(*db)
 	must(err)
@@ -226,6 +227,18 @@ func cmdMissingLocal(args []string) {
 	}
 	for _, item := range items {
 		fmt.Printf("path=%s rev=%s content_hash=%s size=%d state=%s\n", item.Path, item.Rev, item.ContentHash, item.Size, item.State)
+	}
+	if *enqueueReview {
+		plan := reconcile.BuildDeleteReviewPlan(items, nil)
+		created := 0
+		for _, op := range plan.Ops {
+			if _, ok, err := s.EnqueueOpIfMissing(op.Op, op.Path, op); err != nil {
+				must(err)
+			} else if ok {
+				created++
+			}
+		}
+		fmt.Printf("review_ops_enqueued=%d\n", created)
 	}
 }
 

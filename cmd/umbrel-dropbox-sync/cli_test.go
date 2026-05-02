@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
 	"github.com/earl/umbrel-dropbox-sync/internal/state"
 )
 
@@ -136,8 +137,20 @@ func TestCLIMissingLocalFixture(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	out := captureStdout(t, func() { cmdMissingLocal([]string{"--db", db}) })
-	if !strings.Contains(out, "path=/missing.txt") || !strings.Contains(out, "state=local_missing") {
+	out := captureStdout(t, func() { cmdMissingLocal([]string{"--db", db, "--enqueue-review"}) })
+	if !strings.Contains(out, "path=/missing.txt") || !strings.Contains(out, "state=local_missing") || !strings.Contains(out, "review_ops_enqueued=1") {
 		t.Fatalf("missing-local output=%q", out)
+	}
+	s2, err := state.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	op, err := s2.NextPendingOp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if op == nil || op.Op != reconcile.OpReviewRemoteDelete || op.Path != "/missing.txt" {
+		t.Fatalf("op=%#v", op)
 	}
 }
