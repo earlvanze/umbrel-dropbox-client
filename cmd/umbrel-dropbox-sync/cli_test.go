@@ -14,11 +14,12 @@ import (
 func TestCLIInitSyncStatusDryRunFixture(t *testing.T) {
 	root := t.TempDir()
 	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	cfg := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	out := captureStdout(t, func() { cmdInit([]string{"--root", root, "--db", db}) })
-	if !strings.Contains(out, "initialized root=") || !strings.Contains(out, "db=") {
+	out := captureStdout(t, func() { cmdInit([]string{"--root", root, "--db", db, "--config", cfg}) })
+	if !strings.Contains(out, "initialized root=") || !strings.Contains(out, "db=") || !strings.Contains(out, "config=") {
 		t.Fatalf("init output=%q", out)
 	}
 	out = captureStdout(t, func() { cmdSync([]string{"--once", "--dry-run", "--root", root, "--db", db}) })
@@ -32,6 +33,9 @@ func TestCLIInitSyncStatusDryRunFixture(t *testing.T) {
 		}
 	}
 
+	if _, err := os.Stat(cfg); err != nil {
+		t.Fatal(err)
+	}
 	s, err := state.Open(db)
 	if err != nil {
 		t.Fatal(err)

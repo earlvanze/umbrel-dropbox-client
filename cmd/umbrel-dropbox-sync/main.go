@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/earl/umbrel-dropbox-sync/internal/auth"
+	"github.com/earl/umbrel-dropbox-sync/internal/config"
 	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
 	"github.com/earl/umbrel-dropbox-sync/internal/hash"
 	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
@@ -56,7 +57,7 @@ func usage() {
 	fmt.Println(`umbrel-dropbox-sync
 
 Commands:
-  init --root PATH [--db PATH]
+  init --root PATH [--db PATH] [--config PATH]
   status [--db PATH]
   doctor [--db PATH] [--root PATH] [--token-file PATH]
   pause [--db PATH]
@@ -84,6 +85,7 @@ func cmdInit(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	root := fs.String("root", filepath.Join(os.Getenv("HOME"), "Dropbox"), "local sync root")
 	db := fs.String("db", "", "state database path")
+	configPath := fs.String("config", "", "optional daemon config path to write")
 	_ = fs.Parse(args)
 	abs, err := filepath.Abs(*root)
 	must(err)
@@ -92,9 +94,20 @@ func cmdInit(args []string) {
 	must(err)
 	defer s.Close()
 	must(s.Init())
+	resolvedDB := dbPath(abs, *db)
 	must(s.SetConfig("root", abs))
 	must(s.Event("init", abs))
-	fmt.Printf("initialized root=%s db=%s\n", abs, dbPath(abs, *db))
+	if *configPath != "" {
+		cfg := config.Default(abs)
+		cfg.DBPath = resolvedDB
+		must(os.MkdirAll(filepath.Dir(*configPath), 0700))
+		must(config.Save(*configPath, cfg))
+	}
+	fmt.Printf("initialized root=%s db=%s", abs, resolvedDB)
+	if *configPath != "" {
+		fmt.Printf(" config=%s", *configPath)
+	}
+	fmt.Println()
 }
 
 func cmdStatus(args []string) {

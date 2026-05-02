@@ -10,5 +10,5 @@ tar -xzf "$tmp/pkg.tgz" -C "$tmp"
 sudo install -m 0755 "$tmp/umbrel-dropbox-sync" /usr/local/bin/umbrel-dropbox-sync
 sudo install -m 0755 "$tmp/umbrel-dropbox-syncd" /usr/local/bin/umbrel-dropbox-syncd
 mkdir -p ~/.config/umbrel-dropbox-sync
-umbrel-dropbox-sync init --root "$HOME/Dropbox"
+umbrel-dropbox-sync init --root "$HOME/Dropbox" --config "$HOME/.config/umbrel-dropbox-sync/config.json"
 echo "Installed. Configure OAuth token/device auth before enabling daemon."

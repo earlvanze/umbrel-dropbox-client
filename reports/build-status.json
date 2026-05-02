@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: CLI dry-run fixtures added",
+  "status": "production foundation milestone 3 advanced: install/service smoke tests added",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -29,14 +29,14 @@
     "remote cursor helpers for Dropbox latest-cursor API and file-only remote metadata state ingestion",
     "remote delta ingestion loop with stored cursor resume, paginated continue handling, file metadata application, cursor persistence, and audit events",
     "remote delta ingestion wired into daemon dry-run cycles and CLI sync --remote-delta with token-file support",
-    "end-to-end CLI fixture tests for init, dry-run sync, status, pause, and resume flows"
+    "end-to-end CLI fixture tests for init, dry-run sync, status, pause, and resume flows",
+    "packaged install/service smoke coverage for init --config daemon config, install script config initialization, systemd/goreleaser paths, and binary builds"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
     "validate OAuth device-code flow against a non-production Dropbox test folder",
-    "continue production sync engine implementation",
-    "add packaged install/service smoke tests"
+    "continue production sync engine implementation"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T17:55:00Z"
+  "last_test": "go test ./... passed @ 2026-05-02T18:05:00Z"
 }
