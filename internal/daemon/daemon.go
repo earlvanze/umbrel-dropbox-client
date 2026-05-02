@@ -8,16 +8,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/earl/umbrel-dropbox-sync/internal/auth"
 	"github.com/earl/umbrel-dropbox-sync/internal/config"
+	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
 	"github.com/earl/umbrel-dropbox-sync/internal/scan"
 	"github.com/earl/umbrel-dropbox-sync/internal/state"
 	"github.com/earl/umbrel-dropbox-sync/internal/worker"
 )
 
 type Daemon struct {
-	cfg   config.Config
-	store *state.Store
-	log   *slog.Logger
+	cfg          config.Config
+	store        *state.Store
+	log          *slog.Logger
+	remoteClient state.RemoteDeltaClient
 }
 
 type CycleStats struct {
@@ -27,6 +30,9 @@ type CycleStats struct {
 	WorkerCompleted    int
 	WorkerFailed       int
 	WorkerProcessLimit int
+	RemotePages        int
+	RemoteEntries      int
+	RemoteAppliedFiles int
 }
 
 func New(cfg config.Config, store *state.Store, logger *slog.Logger) *Daemon {
@@ -132,6 +138,10 @@ func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 	if !d.cfg.DryRun {
 		return CycleStats{}, fmt.Errorf("daemon live mode is not enabled; use CLI worker --live for guarded transfers")
 	}
+	remoteStats, err := d.ingestRemoteDelta(ctx)
+	if err != nil {
+		return CycleStats{}, err
+	}
 	files, err := scan.Walk(d.cfg.Root, scan.DefaultOptions())
 	if err != nil {
 		return CycleStats{}, err
@@ -143,7 +153,7 @@ func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 	}
 	limit := d.workerLimit()
 	p := worker.Processor{Store: d.store, Handler: worker.DryRunHandler{Store: d.store}}
-	stats := CycleStats{Root: d.cfg.Root, LocalFiles: len(files), WorkerProcessLimit: limit}
+	stats := CycleStats{Root: d.cfg.Root, LocalFiles: len(files), WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles}
 	for stats.WorkerProcessed < limit {
 		res, err := p.ProcessOne(ctx)
 		if err != nil {
@@ -160,10 +170,10 @@ func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 			stats.WorkerFailed++
 		}
 	}
-	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s local_files=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, stats.LocalFiles, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
+	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s local_files=%d remote_entries=%d remote_applied_files=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, stats.LocalFiles, stats.RemoteEntries, stats.RemoteAppliedFiles, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
 		return stats, err
 	}
-	d.log.Info("sync cycle complete", "root", stats.Root, "local_files", stats.LocalFiles, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
+	d.log.Info("sync cycle complete", "root", stats.Root, "local_files", stats.LocalFiles, "remote_entries", stats.RemoteEntries, "remote_applied_files", stats.RemoteAppliedFiles, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
 	return stats, nil
 }
 
@@ -173,4 +183,25 @@ func (d *Daemon) workerLimit() int {
 		return 1
 	}
 	return limit
+}
+
+func (d *Daemon) ingestRemoteDelta(ctx context.Context) (state.RemoteDeltaStats, error) {
+	if !d.cfg.RemoteDelta {
+		return state.RemoteDeltaStats{}, nil
+	}
+	client := d.remoteClient
+	if client == nil {
+		if d.cfg.TokenFile == "" {
+			return state.RemoteDeltaStats{}, fmt.Errorf("remote_delta requires token_file")
+		}
+		tok, err := auth.LoadToken(d.cfg.TokenFile)
+		if err != nil {
+			return state.RemoteDeltaStats{}, err
+		}
+		if tok.AccessToken == "" {
+			return state.RemoteDeltaStats{}, fmt.Errorf("remote_delta token_file has no access token")
+		}
+		client = dropbox.New(tok.AccessToken)
+	}
+	return d.store.IngestRemoteDelta(ctx, client, d.cfg.RemotePath)
 }

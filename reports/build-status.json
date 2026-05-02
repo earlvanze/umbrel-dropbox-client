@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: remote delta ingestion loop added",
+  "status": "production foundation milestone 3 advanced: remote delta wired into daemon and CLI dry-run",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -27,15 +27,16 @@
     "doctor CLI validates DB initialization, sync root, token file hygiene, Dropbox DNS, and local state summary",
     "deterministic dry-run integration fixture for local scan, remote metadata reconciliation, queued ops, and conflict persistence counts",
     "remote cursor helpers for Dropbox latest-cursor API and file-only remote metadata state ingestion",
-    "remote delta ingestion loop with stored cursor resume, paginated continue handling, file metadata application, cursor persistence, and audit events"
+    "remote delta ingestion loop with stored cursor resume, paginated continue handling, file metadata application, cursor persistence, and audit events",
+    "remote delta ingestion wired into daemon dry-run cycles and CLI sync --remote-delta with token-file support"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
-    "wire remote delta ingestion into daemon/CLI dry-run cycle with token-file support",
+    "add end-to-end dry-run CLI fixture command tests",
     "validate OAuth device-code flow against a non-production Dropbox test folder",
     "continue production sync engine implementation",
     "add end-to-end dry-run CLI fixture command tests"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T16:05:00Z"
+  "last_test": "go test ./... passed @ 2026-05-02T17:45:00Z"
 }

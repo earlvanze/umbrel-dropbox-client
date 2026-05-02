@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/earl/umbrel-dropbox-sync/internal/config"
+	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
 	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
 	"github.com/earl/umbrel-dropbox-sync/internal/state"
 )
@@ -108,5 +109,43 @@ func TestHealthHandlerReturnsStatusJSON(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), `"paused":true`) || !strings.Contains(rr.Body.String(), `"ok":true`) {
 		t.Fatalf("body=%s", rr.Body.String())
+	}
+}
+
+type fakeDaemonRemoteClient struct {
+	pages map[string]*dropbox.ListFolderResult
+}
+
+func (f fakeDaemonRemoteClient) ListFolder(ctx context.Context, path string, recursive bool) (*dropbox.ListFolderResult, error) {
+	return f.pages[""], nil
+}
+
+func (f fakeDaemonRemoteClient) ListFolderContinue(ctx context.Context, cursor string) (*dropbox.ListFolderResult, error) {
+	return f.pages[cursor], nil
+}
+
+func TestRunCycleIngestsRemoteDeltaWhenConfigured(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := testStore(t)
+	d := New(config.Config{Root: root, DryRun: true, RemoteDelta: true}, s, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	d.remoteClient = fakeDaemonRemoteClient{pages: map[string]*dropbox.ListFolderResult{
+		"": {Entries: []dropbox.Metadata{{Tag: "file", PathLower: "/remote.txt", Rev: "r1"}}, Cursor: "c1", HasMore: false},
+	}}
+	stats, err := d.RunCycle(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.RemoteEntries != 1 || stats.RemoteAppliedFiles != 1 || stats.RemotePages != 1 || stats.LocalFiles != 1 {
+		t.Fatalf("stats=%#v", stats)
+	}
+	cursor, err := s.GetConfig(state.DropboxCursorKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != "c1" {
+		t.Fatalf("cursor=%q", cursor)
 	}
 }

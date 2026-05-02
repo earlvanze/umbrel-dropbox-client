@@ -25,6 +25,7 @@ Implemented:
 - Deterministic dry-run integration fixture added for local scan + remote metadata reconciliation + queue/conflict persistence counts.
 - Remote cursor helpers added: Dropbox latest-cursor API, remote metadata application helper, and tests for file-only state ingestion.
 - Remote delta ingestion loop added with stored cursor resume, paginated continue handling, file metadata application, cursor persistence, audit events, and tests.
+- Remote delta ingestion wired into daemon dry-run cycles and CLI dry-run sync via `--remote-delta`, with `--token-file` support and test coverage.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -33,7 +34,7 @@ Safety:
 
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
-2. Wire remote delta ingestion into daemon/CLI dry-run cycle with token-file support.
+2. Add end-to-end dry-run CLI fixture command tests.
 3. Add end-to-end dry-run CLI fixture command tests.
 
 Validation:

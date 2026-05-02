@@ -66,7 +66,7 @@ Commands:
   auth save --token-env DROPBOX_TOKEN [--token-file PATH]
   auth device-code --client-id APP_KEY [--token-file PATH]
   remote-account --token-env DROPBOX_TOKEN
-  sync --once --dry-run [--db PATH] [--root PATH] [--remote] [--remote-path PATH] [--token-env DROPBOX_TOKEN]
+  sync --once --dry-run [--db PATH] [--root PATH] [--remote|--remote-delta] [--remote-path PATH] [--token-file PATH|--token-env DROPBOX_TOKEN]
   worker --once --dry-run [--db PATH] [--limit N]
   worker --once --live --i-understand-risk [--db PATH] [--root PATH] [--limit N] [--token-file PATH|--token-env DROPBOX_TOKEN]
 
@@ -321,11 +321,9 @@ func cmdAuthDeviceCode(args []string) {
 func cmdRemoteAccount(args []string) {
 	fs := flag.NewFlagSet("remote-account", flag.ExitOnError)
 	tokenEnv := fs.String("token-env", "DROPBOX_TOKEN", "environment variable containing Dropbox token")
+	tokenFile := fs.String("token-file", "", "secure token file path")
 	_ = fs.Parse(args)
-	token := os.Getenv(*tokenEnv)
-	if token == "" {
-		fatal("missing token env %s", *tokenEnv)
-	}
+	token := loadAccessToken(*tokenFile, *tokenEnv)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	acct, err := dropbox.New(token).CurrentAccount(ctx)
@@ -339,15 +337,20 @@ func cmdSync(args []string) {
 	once := fs.Bool("once", true, "run one sync cycle")
 	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
 	rootFlag := fs.String("root", "", "local sync root override")
-	remote := fs.Bool("remote", false, "also fetch Dropbox remote metadata for dry-run reconciliation")
+	remote := fs.Bool("remote", false, "also fetch full Dropbox remote metadata for dry-run reconciliation")
+	remoteDelta := fs.Bool("remote-delta", false, "fetch incremental Dropbox remote metadata using the stored cursor")
 	remotePath := fs.String("remote-path", "", "Dropbox remote path to list")
 	tokenEnv := fs.String("token-env", "DROPBOX_TOKEN", "environment variable containing Dropbox token")
+	tokenFile := fs.String("token-file", "", "secure token file path")
 	_ = fs.Parse(args)
 	if !*once {
 		fatal("continuous sync is not enabled yet; use --once")
 	}
 	if !*dry {
 		fatal("live sync is not enabled yet; use --dry-run")
+	}
+	if *remote && *remoteDelta {
+		fatal("choose only one remote mode: --remote or --remote-delta")
 	}
 	s, err := state.Open(*db)
 	must(err)
@@ -376,36 +379,24 @@ func cmdSync(args []string) {
 	}
 	remoteFiles := 0
 	var remoteEntries []dropbox.Metadata
-	if *remote {
-		token := os.Getenv(*tokenEnv)
-		if token == "" {
-			fatal("missing token env %s for --remote", *tokenEnv)
-		}
+	if *remote || *remoteDelta {
+		token := loadAccessToken(*tokenFile, *tokenEnv)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		entries, cursor, err := dropbox.New(token).ListFolderAll(ctx, *remotePath, true)
-		must(err)
-		remoteEntries = entries
-		for _, e := range entries {
-			if e.Tag != "file" {
-				continue
-			}
-			path := e.PathLower
-			if path == "" {
-				path = e.PathDisplay
-			}
-			must(s.UpsertEntry(state.Entry{
-				Path:        path,
-				DropboxID:   e.ID,
-				Rev:         e.Rev,
-				ContentHash: e.ContentHash,
-				Size:        e.Size,
-				MTime:       e.ServerMtime,
-				State:       "remote_scanned",
-			}))
-			remoteFiles++
+		client := dropbox.New(token)
+		if *remoteDelta {
+			stats, err := s.IngestRemoteDelta(ctx, client, *remotePath)
+			must(err)
+			remoteFiles = stats.AppliedFiles
+		} else {
+			entries, cursor, err := client.ListFolderAll(ctx, *remotePath, true)
+			must(err)
+			remoteEntries = entries
+			applied, err := s.ApplyRemoteMetadata(entries)
+			must(err)
+			remoteFiles = applied
+			must(s.SetConfig(state.DropboxCursorKey, cursor))
 		}
-		must(s.SetConfig("dropbox_cursor", cursor))
 	}
 	planOps, planConflicts, planNoop := 0, 0, 0
 	if *remote {
@@ -504,6 +495,19 @@ func cmdWorker(args []string) {
 	}
 	must(s.Event("worker."+mode+".batch", fmt.Sprintf("processed=%d completed=%d failed=%d limit=%d", processed, completed, failed, *limit)))
 	fmt.Printf("%s worker complete: processed=%d completed=%d failed=%d db=%s\n", mode, processed, completed, failed, *db)
+}
+
+func loadAccessToken(tokenFile, tokenEnv string) string {
+	if tokenFile != "" {
+		tok, err := auth.LoadToken(tokenFile)
+		must(err)
+		return tok.AccessToken
+	}
+	token := os.Getenv(tokenEnv)
+	if token == "" {
+		fatal("missing access token; pass --token-file or set %s", tokenEnv)
+	}
+	return token
 }
 
 func must(err error) {

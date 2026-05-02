@@ -9,6 +9,8 @@ type Config struct {
 	Root                string `json:"root"`
 	DBPath              string `json:"db_path"`
 	RemotePath          string `json:"remote_path"`
+	RemoteDelta         bool   `json:"remote_delta"`
+	TokenFile           string `json:"token_file"`
 	UploadWorkers       int    `json:"upload_workers"`
 	DownloadWorkers     int    `json:"download_workers"`
 	ScanIntervalSeconds int    `json:"scan_interval_seconds"`
