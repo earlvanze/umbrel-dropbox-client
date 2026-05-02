@@ -42,6 +42,17 @@ func DefaultTokenPath() (string, error) {
 	return filepath.Join(home, ".local", "state", "umbrel-dropbox-sync", "token.json"), nil
 }
 
+func TokenFromDropbox(accessToken, refreshToken, tokenType string, expiresIn int, accountID, scope string, now time.Time) Token {
+	if tokenType == "" {
+		tokenType = "bearer"
+	}
+	expiresAt := time.Time{}
+	if expiresIn > 0 {
+		expiresAt = now.UTC().Add(time.Duration(expiresIn) * time.Second)
+	}
+	return Token{AccessToken: accessToken, RefreshToken: refreshToken, TokenType: tokenType, ExpiresAt: expiresAt, AccountID: accountID, Scope: scope}
+}
+
 func SaveToken(path string, tok Token) error {
 	if path == "" {
 		return errors.New("token path is required")

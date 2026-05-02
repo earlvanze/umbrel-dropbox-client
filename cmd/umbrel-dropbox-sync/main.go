@@ -54,6 +54,7 @@ Commands:
   hash PATH
   auth status [--token-file PATH]
   auth save --token-env DROPBOX_TOKEN [--token-file PATH]
+  auth device-code --client-id APP_KEY [--token-file PATH]
   remote-account --token-env DROPBOX_TOKEN
   sync --once --dry-run [--db PATH] [--root PATH] [--remote] [--remote-path PATH] [--token-env DROPBOX_TOKEN]
   worker --once --dry-run [--db PATH] [--limit N]
@@ -117,6 +118,8 @@ func cmdAuth(args []string) {
 		cmdAuthStatus(args[1:])
 	case "save":
 		cmdAuthSave(args[1:])
+	case "device-code":
+		cmdAuthDeviceCode(args[1:])
 	default:
 		fmt.Println("usage: auth status|save")
 		os.Exit(2)
@@ -159,6 +162,55 @@ func cmdAuthSave(args []string) {
 	}
 	must(auth.SaveToken(path, auth.Token{AccessToken: token}))
 	fmt.Printf("token saved path=%s\n", path)
+}
+
+func cmdAuthDeviceCode(args []string) {
+	fs := flag.NewFlagSet("auth device-code", flag.ExitOnError)
+	clientID := fs.String("client-id", os.Getenv("DROPBOX_CLIENT_ID"), "Dropbox app key/client id")
+	tokenFile := fs.String("token-file", "", "secure token file path")
+	_ = fs.Parse(args)
+	if *clientID == "" {
+		fatal("missing Dropbox client id; pass --client-id or set DROPBOX_CLIENT_ID")
+	}
+	path := *tokenFile
+	if path == "" {
+		var err error
+		path, err = auth.DefaultTokenPath()
+		must(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	client := dropbox.NewOAuthClient(*clientID)
+	code, err := client.StartDeviceCode(ctx)
+	must(err)
+	verify := code.VerificationURI
+	if code.VerificationURIComplete != "" {
+		verify = code.VerificationURIComplete
+	}
+	fmt.Printf("open: %s\ncode: %s\n", verify, code.UserCode)
+	interval := code.Interval
+	if interval <= 0 {
+		interval = 5
+	}
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			fatal("device-code auth timed out: %v", ctx.Err())
+		case <-ticker.C:
+			tok, err := client.PollDeviceToken(ctx, code.DeviceCode)
+			if err != nil {
+				if oe, ok := err.(dropbox.OAuthError); ok && (oe.Code == "authorization_pending" || oe.Code == "slow_down") {
+					continue
+				}
+				must(err)
+			}
+			must(auth.SaveToken(path, auth.TokenFromDropbox(tok.AccessToken, tok.RefreshToken, tok.TokenType, tok.ExpiresIn, tok.AccountID, tok.Scope, time.Now())))
+			fmt.Printf("token saved path=%s account_id=%s scope=%s\n", path, tok.AccountID, tok.Scope)
+			return
+		}
+	}
 }
 
 func cmdRemoteAccount(args []string) {
