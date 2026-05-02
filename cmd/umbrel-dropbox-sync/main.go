@@ -58,8 +58,9 @@ Commands:
   remote-account --token-env DROPBOX_TOKEN
   sync --once --dry-run [--db PATH] [--root PATH] [--remote] [--remote-path PATH] [--token-env DROPBOX_TOKEN]
   worker --once --dry-run [--db PATH] [--limit N]
+  worker --once --live --i-understand-risk [--db PATH] [--root PATH] [--limit N] [--token-file PATH|--token-env DROPBOX_TOKEN]
 
-MVP scaffold. Uses DROPBOX_TOKEN or --token-env for API calls.`)
+MVP scaffold. Live transfers require explicit --live --i-understand-risk gates.`)
 }
 
 func dbPath(root string, explicit string) string {
@@ -327,16 +328,27 @@ func cmdSync(args []string) {
 
 func cmdWorker(args []string) {
 	fs := flag.NewFlagSet("worker", flag.ExitOnError)
-	dry := fs.Bool("dry-run", true, "validate and complete queued work without local or remote writes")
+	dry := fs.Bool("dry-run", false, "validate and complete queued work without local or remote writes")
+	live := fs.Bool("live", false, "execute guarded live upload/download transfers")
+	ackRisk := fs.Bool("i-understand-risk", false, "required with --live")
 	once := fs.Bool("once", true, "process ready queue items once")
 	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
+	rootFlag := fs.String("root", "", "local sync root override")
 	limit := fs.Int("limit", 1, "maximum ready operations to process")
+	tokenEnv := fs.String("token-env", "DROPBOX_TOKEN", "environment variable containing Dropbox token")
+	tokenFile := fs.String("token-file", "", "secure token file path")
 	_ = fs.Parse(args)
 	if !*once {
 		fatal("continuous worker mode is not enabled yet; use --once")
 	}
-	if !*dry {
-		fatal("live worker mode is not enabled yet; use --dry-run")
+	if *live && *dry {
+		fatal("choose exactly one mode: --dry-run or --live")
+	}
+	if !*live && !*dry {
+		fatal("worker requires --dry-run unless --live is explicitly enabled")
+	}
+	if *live && !*ackRisk {
+		fatal("live worker mode requires --i-understand-risk")
 	}
 	if *limit < 1 {
 		fatal("limit must be >= 1")
@@ -345,7 +357,32 @@ func cmdWorker(args []string) {
 	must(err)
 	defer s.Close()
 	must(s.Init())
-	p := worker.Processor{Store: s, Handler: worker.DryRunHandler{Store: s}}
+	handler := worker.Handler(worker.DryRunHandler{Store: s})
+	mode := "dry_run"
+	if *live {
+		root := *rootFlag
+		if root == "" {
+			root, err = s.GetConfig("root")
+			must(err)
+		}
+		if root == "" {
+			fatal("missing sync root; run init --root PATH or pass --root PATH")
+		}
+		token := ""
+		if *tokenFile != "" {
+			tok, err := auth.LoadToken(*tokenFile)
+			must(err)
+			token = tok.AccessToken
+		} else {
+			token = os.Getenv(*tokenEnv)
+		}
+		if token == "" {
+			fatal("missing access token; pass --token-file or set %s", *tokenEnv)
+		}
+		handler = worker.TransferHandler{Store: s, Client: dropbox.New(token), Root: root, AllowLive: true}
+		mode = "live"
+	}
+	p := worker.Processor{Store: s, Handler: handler}
 	processed, completed, failed := 0, 0, 0
 	for processed < *limit {
 		res, err := p.ProcessOne(context.Background())
@@ -361,8 +398,8 @@ func cmdWorker(args []string) {
 			failed++
 		}
 	}
-	must(s.Event("worker.dry_run.batch", fmt.Sprintf("processed=%d completed=%d failed=%d limit=%d", processed, completed, failed, *limit)))
-	fmt.Printf("dry-run worker complete: processed=%d completed=%d failed=%d db=%s\n", processed, completed, failed, *db)
+	must(s.Event("worker."+mode+".batch", fmt.Sprintf("processed=%d completed=%d failed=%d limit=%d", processed, completed, failed, *limit)))
+	fmt.Printf("%s worker complete: processed=%d completed=%d failed=%d db=%s\n", mode, processed, completed, failed, *db)
 }
 
 func must(err error) {
