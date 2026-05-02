@@ -14,6 +14,7 @@ Implemented:
 - Dry-run reconciliation now builds explicit upload/download/conflict plans from local scan plus remote metadata and records them as deduplicated pending ops/conflicts.
 - Durable worker queue processor added under `internal/worker` with injectable local handlers, retry/backoff scheduling, Retry-After support, success completion, and terminal failure state.
 - Dry-run worker CLI added to validate queued upload/download plans and complete safe local-only operations without touching Dropbox or local files.
+- Secure local token file storage added with private `0600` permissions, redacted auth status, and env-token import CLI scaffold.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
@@ -22,7 +23,7 @@ Safety:
 
 Next:
 1. Replace dry-run worker handler with guarded real upload/download transfer handlers after non-production auth validation.
-2. Validate OAuth/token handling against a non-production Dropbox test folder.
+2. Add Dropbox OAuth device-code exchange client and validate against a non-production Dropbox test folder.
 3. Add a non-production Dropbox fixture/integration pass for dry-run plan counts.
 
 Validation:

@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: dry-run worker queue processing wired",
+  "status": "production foundation milestone 3 advanced: secure token storage scaffold added",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -15,15 +15,16 @@
     "dry-run reconciliation builds explicit upload/download/conflict plans and records deduplicated pending ops/conflicts without file mutations",
     "pending_ops schema now tracks status, retry_at, last_error, and completed_at for durable retry scheduling",
     "local-only worker queue processor handles success completion, exponential backoff retries, Retry-After style errors, and terminal failure after max attempts",
-    "dry-run worker CLI validates queued upload/download plans and completes safe local-only operations without touching Dropbox or local files"
+    "dry-run worker CLI validates queued upload/download plans and completes safe local-only operations without touching Dropbox or local files",
+    "secure local token file storage with 0600 permissions, redacted auth status, and env-token import CLI scaffold"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
     "replace dry-run worker handler with guarded real upload/download transfer handlers after non-production auth validation",
-    "validate OAuth/token handling against a non-production Dropbox test folder",
+    "add Dropbox OAuth device-code exchange client and validate against a non-production Dropbox test folder",
     "continue production sync engine implementation",
     "add non-production Dropbox fixture/integration pass for dry-run plan counts"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T13:57:00Z"
+  "last_test": "go test ./... passed @ 2026-05-02T14:05:00Z"
 }

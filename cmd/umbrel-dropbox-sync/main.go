@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/earl/umbrel-dropbox-sync/internal/auth"
 	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
 	"github.com/earl/umbrel-dropbox-sync/internal/hash"
 	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
@@ -30,6 +31,8 @@ func main() {
 		cmdStatus(os.Args[2:])
 	case "hash":
 		cmdHash(os.Args[2:])
+	case "auth":
+		cmdAuth(os.Args[2:])
 	case "remote-account":
 		cmdRemoteAccount(os.Args[2:])
 	case "sync":
@@ -49,6 +52,8 @@ Commands:
   init --root PATH [--db PATH]
   status [--db PATH]
   hash PATH
+  auth status [--token-file PATH]
+  auth save --token-env DROPBOX_TOKEN [--token-file PATH]
   remote-account --token-env DROPBOX_TOKEN
   sync --once --dry-run [--db PATH] [--root PATH] [--remote] [--remote-path PATH] [--token-env DROPBOX_TOKEN]
   worker --once --dry-run [--db PATH] [--limit N]
@@ -100,6 +105,60 @@ func cmdHash(args []string) {
 	h, err := hash.DropboxContentHash(args[0])
 	must(err)
 	fmt.Println(h)
+}
+
+func cmdAuth(args []string) {
+	if len(args) < 1 {
+		fmt.Println("usage: auth status|save")
+		os.Exit(2)
+	}
+	switch args[0] {
+	case "status":
+		cmdAuthStatus(args[1:])
+	case "save":
+		cmdAuthSave(args[1:])
+	default:
+		fmt.Println("usage: auth status|save")
+		os.Exit(2)
+	}
+}
+
+func cmdAuthStatus(args []string) {
+	fs := flag.NewFlagSet("auth status", flag.ExitOnError)
+	tokenFile := fs.String("token-file", "", "secure token file path")
+	_ = fs.Parse(args)
+	path := *tokenFile
+	if path == "" {
+		var err error
+		path, err = auth.DefaultTokenPath()
+		must(err)
+	}
+	st, err := auth.TokenStatus(path)
+	must(err)
+	if !st.Present {
+		fmt.Printf("token: missing path=%s\n", st.Path)
+		return
+	}
+	fmt.Printf("token: present path=%s token_type=%s account_id=%s has_refresh=%v expires_at=%s scope=%s\n", st.Path, st.TokenType, st.AccountID, st.HasRefresh, st.ExpiresAt.Format(time.RFC3339), st.Scope)
+}
+
+func cmdAuthSave(args []string) {
+	fs := flag.NewFlagSet("auth save", flag.ExitOnError)
+	tokenEnv := fs.String("token-env", "DROPBOX_TOKEN", "environment variable containing Dropbox token")
+	tokenFile := fs.String("token-file", "", "secure token file path")
+	_ = fs.Parse(args)
+	path := *tokenFile
+	if path == "" {
+		var err error
+		path, err = auth.DefaultTokenPath()
+		must(err)
+	}
+	token := os.Getenv(*tokenEnv)
+	if token == "" {
+		fatal("missing token env %s", *tokenEnv)
+	}
+	must(auth.SaveToken(path, auth.Token{AccessToken: token}))
+	fmt.Printf("token saved path=%s\n", path)
 }
 
 func cmdRemoteAccount(args []string) {
