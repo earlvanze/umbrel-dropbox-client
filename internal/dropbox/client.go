@@ -5,14 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
 type Client struct {
-	token  string
-	http   *http.Client
-	apiURL string
+	token      string
+	http       *http.Client
+	apiURL     string
+	contentURL string
 }
 
 func New(token string) *Client {
@@ -26,7 +31,15 @@ func NewWithHTTP(token string, httpClient *http.Client, apiURL string) *Client {
 	if apiURL == "" {
 		apiURL = "https://api.dropboxapi.com/2"
 	}
-	return &Client{token: token, http: httpClient, apiURL: apiURL}
+	return &Client{token: token, http: httpClient, apiURL: strings.TrimRight(apiURL, "/"), contentURL: contentURLFor(apiURL)}
+}
+
+func contentURLFor(apiURL string) string {
+	apiURL = strings.TrimRight(apiURL, "/")
+	if strings.Contains(apiURL, "api.dropboxapi.com") {
+		return strings.Replace(apiURL, "api.dropboxapi.com", "content.dropboxapi.com", 1)
+	}
+	return apiURL
 }
 
 type Account struct {
@@ -105,6 +118,101 @@ func (c *Client) ListFolderAll(ctx context.Context, path string, recursive bool)
 		cursor = page.Cursor
 	}
 	return entries, cursor, nil
+}
+
+func (c *Client) UploadFile(ctx context.Context, dropboxPath, localPath string) (*Metadata, error) {
+	f, err := os.Open(localPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return c.Upload(ctx, dropboxPath, f)
+}
+
+func (c *Client) Upload(ctx context.Context, dropboxPath string, body io.Reader) (*Metadata, error) {
+	arg := map[string]any{
+		"path":       dropboxPath,
+		"mode":       "add",
+		"autorename": false,
+		"mute":       false,
+	}
+	var out Metadata
+	if err := c.content(ctx, c.contentURL+"/files/upload", arg, body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DownloadFile(ctx context.Context, dropboxPath, localPath string) (*Metadata, error) {
+	if err := os.MkdirAll(filepath.Dir(localPath), 0700); err != nil {
+		return nil, err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(localPath), ".download-*.tmp")
+	if err != nil {
+		return nil, err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	meta, err := c.Download(ctx, dropboxPath, tmp)
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Rename(tmpName, localPath); err != nil {
+		return nil, err
+	}
+	return meta, nil
+}
+
+func (c *Client) Download(ctx context.Context, dropboxPath string, out io.Writer) (*Metadata, error) {
+	arg := map[string]any{"path": dropboxPath}
+	var meta Metadata
+	if err := c.content(ctx, c.contentURL+"/files/download", arg, nil, &meta, out); err != nil {
+		return nil, err
+	}
+	return &meta, nil
+}
+
+func (c *Client) content(ctx context.Context, url string, arg any, body io.Reader, metaOut any, writers ...io.Writer) error {
+	if body == nil {
+		body = bytes.NewReader(nil)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	if err != nil {
+		return err
+	}
+	argRaw, err := json.Marshal(arg)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Dropbox-API-Arg", string(argRaw))
+	if len(writers) == 0 {
+		req.Header.Set("Content-Type", "application/octet-stream")
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return fmt.Errorf("dropbox content %s: %s", url, res.Status)
+	}
+	if len(writers) > 0 {
+		if header := res.Header.Get("Dropbox-API-Result"); header != "" && metaOut != nil {
+			if err := json.Unmarshal([]byte(header), metaOut); err != nil {
+				return err
+			}
+		}
+		_, err = io.Copy(writers[0], res.Body)
+		return err
+	}
+	if metaOut == nil {
+		return nil
+	}
+	return json.NewDecoder(res.Body).Decode(metaOut)
 }
 
 func (c *Client) rpc(ctx context.Context, url string, in any, out any) error {
