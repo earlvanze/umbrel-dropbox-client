@@ -33,13 +33,13 @@ type Status struct {
 
 func DefaultTokenPath() (string, error) {
 	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
-		return filepath.Join(xdg, "umbrel-dropbox-sync", "token.json"), nil
+		return filepath.Join(xdg, "umbrel-dropbox-client", "token.json"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "state", "umbrel-dropbox-sync", "token.json"), nil
+	return filepath.Join(home, ".local", "state", "umbrel-dropbox-client", "token.json"), nil
 }
 
 func TokenFromDropbox(accessToken, refreshToken, tokenType string, expiresIn int, accountID, scope string, now time.Time) Token {

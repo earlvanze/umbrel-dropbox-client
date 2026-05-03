@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/auth"
-	"github.com/earl/umbrel-dropbox-sync/internal/config"
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
-	"github.com/earl/umbrel-dropbox-sync/internal/scan"
-	"github.com/earl/umbrel-dropbox-sync/internal/state"
-	"github.com/earl/umbrel-dropbox-sync/internal/watch"
-	"github.com/earl/umbrel-dropbox-sync/internal/worker"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/auth"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/watch"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/worker"
 )
 
 type Daemon struct {

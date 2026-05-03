@@ -40,7 +40,7 @@
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
-    "add umbrel_dropbox_sync to upstream ACFS checksums.yaml if accepted",
+    "add umbrel_dropbox_client to upstream ACFS checksums.yaml if accepted",
     "validate OAuth device-code flow against a non-production Dropbox test folder",
     "add explicit reviewed delete execution gates after manual tombstone policy approval",
     "run smoke-test --live --i-understand-risk against a non-production Dropbox test folder after OAuth is validated"

@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
-	"github.com/earl/umbrel-dropbox-sync/internal/state"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
 )
 
 func TestCLIInitSyncStatusDryRunFixture(t *testing.T) {
 	root := t.TempDir()
-	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	db := filepath.Join(root, ".umbrel-dropbox-client", "state.db")
 	cfg := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600); err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func TestCLIInitSyncStatusDryRunFixture(t *testing.T) {
 
 func TestCLIPauseResumeFixture(t *testing.T) {
 	root := t.TempDir()
-	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	db := filepath.Join(root, ".umbrel-dropbox-client", "state.db")
 	captureStdout(t, func() { cmdInit([]string{"--root", root, "--db", db}) })
 	out := captureStdout(t, func() { cmdPause([]string{"--db", db}, true) })
 	if !strings.Contains(out, "paused db=") {
@@ -96,7 +96,7 @@ func captureStdout(t *testing.T, fn func()) string {
 
 func TestCLIConflictsAndResolveFixture(t *testing.T) {
 	root := t.TempDir()
-	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	db := filepath.Join(root, ".umbrel-dropbox-client", "state.db")
 	captureStdout(t, func() { cmdInit([]string{"--root", root, "--db", db}) })
 	s, err := state.Open(db)
 	if err != nil {
@@ -125,7 +125,7 @@ func TestCLIConflictsAndResolveFixture(t *testing.T) {
 
 func TestCLIMissingLocalFixture(t *testing.T) {
 	root := t.TempDir()
-	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	db := filepath.Join(root, ".umbrel-dropbox-client", "state.db")
 	captureStdout(t, func() { cmdInit([]string{"--root", root, "--db", db}) })
 	s, err := state.Open(db)
 	if err != nil {

@@ -4,9 +4,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/conflict"
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
-	"github.com/earl/umbrel-dropbox-sync/internal/scan"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/conflict"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
 )
 
 type PlannedOp struct {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
 )
 
 func TestApplyRemoteMetadataSkipsNonFilesAndStoresFiles(t *testing.T) {

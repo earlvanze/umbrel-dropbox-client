@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/earlvanze/umbrel-dropbox-sync:latest
+    image: ghcr.io/earlvanze/umbrel-dropbox-client:latest
     restart: unless-stopped
     ports:
       - "8477:8477"

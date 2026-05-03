@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
-	"github.com/earl/umbrel-dropbox-sync/internal/hash"
-	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/hash"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
 )
 
 type fakeTransferClient struct {

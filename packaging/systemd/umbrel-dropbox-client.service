@@ -1,11 +1,11 @@
 [Unit]
-Description=Umbrel Dropbox Sync daemon
+Description=Umbrel Dropbox Client daemon
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/umbrel-dropbox-syncd --config %h/.config/umbrel-dropbox-sync/config.json
+ExecStart=/usr/bin/umbrel-dropbox-clientd --config %h/.config/umbrel-dropbox-client/config.json
 Restart=on-failure
 RestartSec=10
 Nice=5

@@ -3,8 +3,8 @@ package reconcile
 import (
 	"testing"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
-	"github.com/earl/umbrel-dropbox-sync/internal/scan"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
 )
 
 func TestBuildDryRunPlanUploadDownloadConflictAndNoop(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
 )
 
 type fakeRemoteDeltaClient struct {

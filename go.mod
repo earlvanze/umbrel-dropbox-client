@@ -1,4 +1,4 @@
-module github.com/earl/umbrel-dropbox-sync
+module github.com/earlvanze/umbrel-dropbox-client
 
 go 1.26
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/state"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
 )
 
 func TestProcessOneCompletesSuccessfulOp(t *testing.T) {

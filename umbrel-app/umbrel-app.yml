@@ -1,16 +1,16 @@
 manifestVersion: 1
-id: umbrel-dropbox-sync
-name: Dropbox Sync Pro
+id: umbrel-dropbox-client
+name: Dropbox Client
 tagline: Reliable Dropbox sync for Umbrel and Linux
-icon: https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-sync/master/data/icons/icon.svg
+icon: https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-client/master/data/icons/icon.svg
 category: files
 description: >-
   A Linux-first Dropbox sync daemon with durable queues, parallel transfers,
   conservative conflict handling, and desktop integration.
 developer: Earl Co
-website: https://github.com/earlvanze/umbrel-dropbox-sync
-repo: https://github.com/earlvanze/umbrel-dropbox-sync
-support: https://github.com/earlvanze/umbrel-dropbox-sync/issues
+website: https://github.com/earlvanze/umbrel-dropbox-client
+repo: https://github.com/earlvanze/umbrel-dropbox-client
+support: https://github.com/earlvanze/umbrel-dropbox-client/issues
 port: 8477
 gallery: []
 path: ""

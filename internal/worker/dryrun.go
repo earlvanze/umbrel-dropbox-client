@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/conflict"
-	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
-	"github.com/earl/umbrel-dropbox-sync/internal/state"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/conflict"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
 )
 
 // DryRunHandler validates planned transfer operations and records what would run

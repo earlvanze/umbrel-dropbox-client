@@ -2,7 +2,7 @@
 
 ## Architecture
 
-`umbrel-dropbox-sync` has three loops:
+`umbrel-dropbox-client` has three loops:
 
 1. **Remote delta loop**
    - Uses Dropbox `/2/files/list_folder` + `/continue` cursors.
@@ -38,14 +38,14 @@ Default policy is conservative:
 ## Expected CLI
 
 ```bash
-umbrel-dropbox-sync init --root ~/Dropbox --remote-path ""
-umbrel-dropbox-sync auth login
-umbrel-dropbox-sync scan --dry-run
-umbrel-dropbox-sync sync --once --dry-run
-umbrel-dropbox-sync daemon
-umbrel-dropbox-sync status
-umbrel-dropbox-sync conflicts list
-umbrel-dropbox-sync conflicts resolve --prefer local|remote|newest --path ...
+umbrel-dropbox-client init --root ~/Dropbox --remote-path ""
+umbrel-dropbox-client auth login
+umbrel-dropbox-client scan --dry-run
+umbrel-dropbox-client sync --once --dry-run
+umbrel-dropbox-client daemon
+umbrel-dropbox-client status
+umbrel-dropbox-client conflicts list
+umbrel-dropbox-client conflicts resolve --prefer local|remote|newest --path ...
 ```
 
 ## Systemd

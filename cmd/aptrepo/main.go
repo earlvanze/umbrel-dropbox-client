@@ -44,7 +44,7 @@ func main() {
 	ph := mustHash(pkgPath)
 	pst, err := os.Stat(pkgPath)
 	must(err)
-	release := fmt.Sprintf("Origin: Umbrel Dropbox Sync\nLabel: Umbrel Dropbox Sync\nSuite: %s\nCodename: %s\nDate: %s\nArchitectures: amd64\nComponents: %s\nSHA256:\n %s %d %s/binary-amd64/Packages\n", *codename, *codename, time.Now().UTC().Format(time.RFC1123Z), *component, ph, pst.Size(), *component)
+	release := fmt.Sprintf("Origin: Umbrel Dropbox Client\nLabel: Umbrel Dropbox Client\nSuite: %s\nCodename: %s\nDate: %s\nArchitectures: amd64\nComponents: %s\nSHA256:\n %s %d %s/binary-amd64/Packages\n", *codename, *codename, time.Now().UTC().Format(time.RFC1123Z), *component, ph, pst.Size(), *component)
 	must(os.WriteFile(filepath.Join(*out, "dists", *codename, "Release"), []byte(release), 0644))
 	fmt.Println("wrote", *out)
 }

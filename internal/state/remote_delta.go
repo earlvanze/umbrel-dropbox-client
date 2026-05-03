@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
 )
 
 const DropboxCursorKey = "dropbox_cursor"

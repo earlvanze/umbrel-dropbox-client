@@ -1,29 +1,29 @@
 version: 2
-project_name: umbrel-dropbox-sync
+project_name: umbrel-dropbox-client
 builds:
   - id: cli
-    main: ./cmd/umbrel-dropbox-sync
-    binary: umbrel-dropbox-sync
+    main: ./cmd/umbrel-dropbox-client
+    binary: umbrel-dropbox-client
     goos: [linux]
     goarch: [amd64, arm64]
   - id: daemon
-    main: ./cmd/umbrel-dropbox-syncd
-    binary: umbrel-dropbox-syncd
+    main: ./cmd/umbrel-dropbox-clientd
+    binary: umbrel-dropbox-clientd
     goos: [linux]
     goarch: [amd64, arm64]
 nfpms:
   - id: deb
-    package_name: umbrel-dropbox-sync
+    package_name: umbrel-dropbox-client
     formats: [deb]
     maintainer: Earl Co <earl@aops.studio>
     description: Reliable Dropbox sync daemon for Linux and Umbrel.
     license: MIT
     bindir: /usr/bin
     contents:
-      - src: packaging/systemd/umbrel-dropbox-sync.service
-        dst: /usr/lib/systemd/user/umbrel-dropbox-sync.service
-      - src: desktop/dolphin/umbrel-dropbox-sync.desktop
-        dst: /usr/share/kio/servicemenus/umbrel-dropbox-sync.desktop
+      - src: packaging/systemd/umbrel-dropbox-client.service
+        dst: /usr/lib/systemd/user/umbrel-dropbox-client.service
+      - src: desktop/dolphin/umbrel-dropbox-client.desktop
+        dst: /usr/share/kio/servicemenus/umbrel-dropbox-client.desktop
     scripts:
       postinstall: packaging/deb/postinst
 archives:
@@ -33,4 +33,4 @@ checksum:
 release:
   github:
     owner: earlvanze
-    name: umbrel-dropbox-sync
+    name: umbrel-dropbox-client

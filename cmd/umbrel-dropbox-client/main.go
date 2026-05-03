@@ -12,17 +12,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/auth"
-	"github.com/earl/umbrel-dropbox-sync/internal/config"
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
-	"github.com/earl/umbrel-dropbox-sync/internal/hash"
-	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
-	"github.com/earl/umbrel-dropbox-sync/internal/scan"
-	"github.com/earl/umbrel-dropbox-sync/internal/state"
-	"github.com/earl/umbrel-dropbox-sync/internal/worker"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/auth"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/hash"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/worker"
 )
 
-const defaultDB = ".umbrel-dropbox-sync/state.db"
+const defaultDB = ".umbrel-dropbox-client/state.db"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -65,7 +65,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Println(`umbrel-dropbox-sync
+	fmt.Println(`umbrel-dropbox-client
 
 Commands:
   init --root PATH [--db PATH] [--config PATH]
@@ -629,11 +629,11 @@ func cmdSmokeTest(args []string) {
 	if *live && !*ackRisk {
 		fatal("live smoke-test requires --i-understand-risk")
 	}
-	root := mustTempDir("umbrel-dropbox-sync-smoke-root-*")
-	db := filepath.Join(root, ".umbrel-dropbox-sync", "state.db")
+	root := mustTempDir("umbrel-dropbox-client-smoke-root-*")
+	db := filepath.Join(root, ".umbrel-dropbox-client", "state.db")
 	must(os.MkdirAll(filepath.Dir(db), 0700))
 	local := filepath.Join(root, "smoke.txt")
-	body := []byte("umbrel-dropbox-sync smoke test\n")
+	body := []byte("umbrel-dropbox-client smoke test\n")
 	must(os.WriteFile(local, body, 0600))
 	s, err := state.Open(db)
 	must(err)

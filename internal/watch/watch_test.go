@@ -22,10 +22,10 @@ func TestWatcherEmitsCreateAndIgnoresStateDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(root, ".umbrel-dropbox-sync"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(root, ".umbrel-dropbox-client"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".umbrel-dropbox-sync", "state.db"), []byte("ignore"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".umbrel-dropbox-client", "state.db"), []byte("ignore"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for {
@@ -34,7 +34,7 @@ func TestWatcherEmitsCreateAndIgnoresStateDir(t *testing.T) {
 			if strings.HasSuffix(ev.Path, "a.txt") {
 				return
 			}
-			if strings.Contains(ev.Path, ".umbrel-dropbox-sync") {
+			if strings.Contains(ev.Path, ".umbrel-dropbox-client") {
 				t.Fatalf("state dir event leaked: %#v", ev)
 			}
 		case <-ctx.Done():

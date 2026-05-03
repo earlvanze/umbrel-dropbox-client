@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/config"
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
-	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
-	"github.com/earl/umbrel-dropbox-sync/internal/state"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
 )
 
 func TestRunCycleScansLocalFilesAndProcessesDryRunQueue(t *testing.T) {

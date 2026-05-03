@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
 )
 
 func TestDryRunHandlerCompletesValidUploadAndRecordsEvent(t *testing.T) {

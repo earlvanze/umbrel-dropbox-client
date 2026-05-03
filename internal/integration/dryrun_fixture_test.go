@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
-	"github.com/earl/umbrel-dropbox-sync/internal/hash"
-	"github.com/earl/umbrel-dropbox-sync/internal/reconcile"
-	"github.com/earl/umbrel-dropbox-sync/internal/scan"
-	"github.com/earl/umbrel-dropbox-sync/internal/state"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/hash"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
 )
 
 func TestDryRunFixtureProducesDeterministicPlanAndQueueCounts(t *testing.T) {
@@ -18,7 +18,7 @@ func TestDryRunFixtureProducesDeterministicPlanAndQueueCounts(t *testing.T) {
 	writeFile(t, filepath.Join(root, "local-only.txt"), "local only")
 	writeFile(t, filepath.Join(root, "same.txt"), "same")
 	writeFile(t, filepath.Join(root, "conflict.txt"), "local conflict")
-	writeFile(t, filepath.Join(root, ".umbrel-dropbox-sync", "ignored.db"), "ignored")
+	writeFile(t, filepath.Join(root, ".umbrel-dropbox-client", "ignored.db"), "ignored")
 
 	files, err := scan.Walk(root, scan.DefaultOptions())
 	if err != nil {

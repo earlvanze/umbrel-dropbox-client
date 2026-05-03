@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/hash"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/hash"
 )
 
 type File struct {
@@ -22,7 +22,7 @@ type Options struct {
 }
 
 func DefaultOptions() Options {
-	return Options{IgnoreDirs: map[string]bool{".git": true, ".umbrel-dropbox-sync": true}}
+	return Options{IgnoreDirs: map[string]bool{".git": true, ".umbrel-dropbox-client": true}}
 }
 
 func Walk(root string, opts Options) ([]File, error) {

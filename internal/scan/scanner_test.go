@@ -14,8 +14,8 @@ func TestWalkIgnoresStateDirAndHashesFiles(t *testing.T) {
 		}
 	}
 	must(os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600))
-	must(os.Mkdir(filepath.Join(root, ".umbrel-dropbox-sync"), 0700))
-	must(os.WriteFile(filepath.Join(root, ".umbrel-dropbox-sync", "state.db"), []byte("ignore"), 0600))
+	must(os.Mkdir(filepath.Join(root, ".umbrel-dropbox-client"), 0700))
+	must(os.WriteFile(filepath.Join(root, ".umbrel-dropbox-client", "state.db"), []byte("ignore"), 0600))
 	files, err := Walk(root, DefaultOptions())
 	must(err)
 	if len(files) != 1 {

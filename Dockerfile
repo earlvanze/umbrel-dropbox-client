@@ -1,12 +1,12 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY . .
-RUN go build -o /out/umbrel-dropbox-sync ./cmd/umbrel-dropbox-sync && go build -o /out/umbrel-dropbox-syncd ./cmd/umbrel-dropbox-syncd
+RUN go build -o /out/umbrel-dropbox-client ./cmd/umbrel-dropbox-client && go build -o /out/umbrel-dropbox-clientd ./cmd/umbrel-dropbox-clientd
 
 FROM alpine:3.22
 RUN adduser -D -h /home/sync sync
-COPY --from=build /out/umbrel-dropbox-sync /usr/bin/umbrel-dropbox-sync
-COPY --from=build /out/umbrel-dropbox-syncd /usr/bin/umbrel-dropbox-syncd
+COPY --from=build /out/umbrel-dropbox-client /usr/bin/umbrel-dropbox-client
+COPY --from=build /out/umbrel-dropbox-clientd /usr/bin/umbrel-dropbox-clientd
 USER sync
 EXPOSE 8477
-CMD ["/usr/bin/umbrel-dropbox-sync", "status", "--db", "/data/state.db"]
+CMD ["/usr/bin/umbrel-dropbox-client", "status", "--db", "/data/state.db"]

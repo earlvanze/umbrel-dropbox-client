@@ -38,7 +38,7 @@ Dicklesworthstone/agentic_coding_flywheel_setup
 Tool key used by this repo:
 
 ```text
-umbrel_dropbox_sync
+umbrel_dropbox_client
 ```
 
 Installer path:
@@ -49,4 +49,4 @@ scripts/install-linux.sh
 
 ## Current ACFS delta
 
-The upstream ACFS `checksums.yaml` does not yet include `umbrel_dropbox_sync`. Until it does, validation warns instead of failing.
+The upstream ACFS `checksums.yaml` does not yet include `umbrel_dropbox_client`. Until it does, validation warns instead of failing.

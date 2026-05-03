@@ -1,4 +1,4 @@
-# Umbrel Dropbox Sync Status
+# Umbrel Dropbox Client Status
 
 Status: production foundation milestone 3 in progress.
 
@@ -62,4 +62,4 @@ Status: ACFS integration milestone complete.
 
 Pending:
 1. Add `ACFS_REPO_DISPATCH_TOKEN` repo secret if dispatch to ACFS is desired.
-2. Add `umbrel_dropbox_sync` to upstream ACFS `checksums.yaml` if we want first-class ACFS tracking.
+2. Add `umbrel_dropbox_client` to upstream ACFS `checksums.yaml` if we want first-class ACFS tracking.

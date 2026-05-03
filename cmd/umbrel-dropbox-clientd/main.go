@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/config"
-	"github.com/earl/umbrel-dropbox-sync/internal/daemon"
-	"github.com/earl/umbrel-dropbox-sync/internal/state"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/daemon"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
 )
 
 func main() {
-	cfgPath := flag.String("config", filepath.Join(os.Getenv("HOME"), ".config", "umbrel-dropbox-sync", "config.json"), "config path")
+	cfgPath := flag.String("config", filepath.Join(os.Getenv("HOME"), ".config", "umbrel-dropbox-client", "config.json"), "config path")
 	flag.Parse()
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {

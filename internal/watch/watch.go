@@ -21,7 +21,7 @@ type Options struct {
 }
 
 func DefaultOptions() Options {
-	return Options{IgnoreDirs: map[string]bool{".git": true, ".umbrel-dropbox-sync": true}}
+	return Options{IgnoreDirs: map[string]bool{".git": true, ".umbrel-dropbox-client": true}}
 }
 
 type Watcher struct {

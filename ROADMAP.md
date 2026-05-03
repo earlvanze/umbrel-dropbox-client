@@ -1,4 +1,4 @@
-# Roadmap: Umbrel Dropbox Sync
+# Roadmap: Umbrel Dropbox Client
 
 ## Phase 1, MVP daemon
 - OAuth/device-code auth.

@@ -1,4 +1,4 @@
-# Umbrel Dropbox Sync
+# Umbrel Dropbox Client
 
 Linux-first Dropbox sync daemon for Umbrel and general Linux desktops.
 
@@ -33,21 +33,21 @@ Not production sync-ready yet.
 
 ```bash
 go test ./...
-go build -o bin/umbrel-dropbox-sync ./cmd/umbrel-dropbox-sync
-go build -o bin/umbrel-dropbox-syncd ./cmd/umbrel-dropbox-syncd
+go build -o bin/umbrel-dropbox-client ./cmd/umbrel-dropbox-client
+go build -o bin/umbrel-dropbox-clientd ./cmd/umbrel-dropbox-clientd
 ```
 
 ## Initialize
 
 ```bash
-umbrel-dropbox-sync init --root ~/Dropbox
-umbrel-dropbox-sync status
+umbrel-dropbox-client init --root ~/Dropbox
+umbrel-dropbox-client status
 ```
 
 ## Install Linux binary
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-sync/master/scripts/install-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-client/master/scripts/install-linux.sh | bash
 ```
 
 ## Agentic coding flywheel

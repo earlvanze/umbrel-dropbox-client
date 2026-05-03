@@ -3,7 +3,7 @@ package state
 import (
 	"time"
 
-	"github.com/earl/umbrel-dropbox-sync/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
 )
 
 func (s *Store) ApplyRemoteMetadata(entries []dropbox.Metadata) (int, error) {
