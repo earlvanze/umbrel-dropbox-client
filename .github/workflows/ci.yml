@@ -11,4 +11,4 @@ jobs:
         with:
           go-version: '1.26.x'
       - run: go test ./...
-      - run: go build ./cmd/umbrel-dropbox-sync ./cmd/umbrel-dropbox-syncd
+      - run: go build ./cmd/umbrel-dropbox-client ./cmd/umbrel-dropbox-clientd

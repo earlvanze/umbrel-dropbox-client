@@ -24,7 +24,7 @@ on:
         type: boolean
 
 env:
-  TOOL_NAME: 'umbrel_dropbox_sync'
+  TOOL_NAME: 'umbrel_dropbox_client'
   INSTALLER_PATH: 'scripts/install-linux.sh'
   ACFS_REPO: 'Dicklesworthstone/agentic_coding_flywheel_setup'
 
