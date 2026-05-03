@@ -454,7 +454,7 @@ func cmdAuthPKCE(args []string) {
 	stateValue, err := dropbox.GenerateCodeVerifier()
 	must(err)
 	client := dropbox.NewOAuthClient(*clientID)
-	pkce, err := client.StartPKCEAuth(uri, stateValue, []string{"files.metadata.read", "files.content.read", "files.content.write"})
+	pkce, err := client.StartPKCEAuth(uri, stateValue, []string{"account_info.read", "files.metadata.read", "files.content.read", "files.content.write"})
 	must(err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

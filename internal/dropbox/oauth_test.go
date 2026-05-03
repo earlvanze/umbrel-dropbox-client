@@ -114,7 +114,7 @@ func TestPKCEVerifierAndChallenge(t *testing.T) {
 }
 
 func TestStartPKCEAuthBuildsAuthorizeURL(t *testing.T) {
-	got, err := NewOAuthClient("app-key").StartPKCEAuth("http://127.0.0.1:17653/callback", "state-1", []string{"files.metadata.read", "files.content.write"})
+	got, err := NewOAuthClient("app-key").StartPKCEAuth("http://127.0.0.1:17653/callback", "state-1", []string{"account_info.read", "files.metadata.read", "files.content.write"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestStartPKCEAuthBuildsAuthorizeURL(t *testing.T) {
 	if q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" || got.CodeVerifier == "" {
 		t.Fatalf("pkce missing query=%#v verifier=%q", q, got.CodeVerifier)
 	}
-	if q.Get("scope") != "files.metadata.read files.content.write" || q.Get("token_access_type") != "offline" {
+	if q.Get("scope") != "account_info.read files.metadata.read files.content.write" || q.Get("token_access_type") != "offline" {
 		t.Fatalf("scope/offline query=%#v", q)
 	}
 }
