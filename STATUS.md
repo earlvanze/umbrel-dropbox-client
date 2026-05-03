@@ -15,6 +15,7 @@ Implemented:
 - Durable worker queue processor added under `internal/worker` with injectable local handlers, retry/backoff scheduling, Retry-After support, success completion, and terminal failure state.
 - Dry-run worker CLI added to validate queued upload/download plans and complete safe local-only operations without touching Dropbox or local files.
 - Secure local token file storage added with private `0600` permissions, redacted auth status, env-token import, and Dropbox OAuth device-code CLI scaffold.
+- Browser-based OAuth2 PKCE auth added for public Docker/Umbrel installs, including authorize URL generation, localhost callback handling, token exchange, secure token save, and tests.
 - Dropbox content upload/download client methods added with mock tests for API args, auth, upload body handling, and atomic download writes.
 - Guarded live transfer worker handler added with explicit `AllowLive` gate, sync-root containment checks, upload hash revalidation, no-overwrite downloads, and state entry updates.
 - Worker CLI now supports explicit guarded live mode via `--live --i-understand-risk`, token-file/env access token loading, and configured/overridden sync root.

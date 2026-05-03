@@ -98,3 +98,63 @@ func mustParseForm(t *testing.T, r *http.Request) url.Values {
 	}
 	return r.Form
 }
+
+func TestPKCEVerifierAndChallenge(t *testing.T) {
+	verifier, err := GenerateCodeVerifier()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(verifier) < 43 || len(verifier) > 128 {
+		t.Fatalf("verifier length=%d", len(verifier))
+	}
+	challenge := DeriveCodeChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+	if challenge != "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" {
+		t.Fatalf("challenge=%q", challenge)
+	}
+}
+
+func TestStartPKCEAuthBuildsAuthorizeURL(t *testing.T) {
+	got, err := NewOAuthClient("app-key").StartPKCEAuth("http://127.0.0.1:17653/callback", "state-1", []string{"files.metadata.read", "files.content.write"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(got.AuthorizeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	if u.Scheme != "https" || u.Host != "www.dropbox.com" || u.Path != "/oauth2/authorize" {
+		t.Fatalf("url=%s", got.AuthorizeURL)
+	}
+	if q.Get("client_id") != "app-key" || q.Get("response_type") != "code" || q.Get("redirect_uri") != "http://127.0.0.1:17653/callback" || q.Get("state") != "state-1" {
+		t.Fatalf("query=%#v", q)
+	}
+	if q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" || got.CodeVerifier == "" {
+		t.Fatalf("pkce missing query=%#v verifier=%q", q, got.CodeVerifier)
+	}
+	if q.Get("scope") != "files.metadata.read files.content.write" || q.Get("token_access_type") != "offline" {
+		t.Fatalf("scope/offline query=%#v", q)
+	}
+}
+
+func TestExchangePKCECodePostsVerifier(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/oauth2/token" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		mustParseForm(t, r)
+		if r.Form.Get("grant_type") != "authorization_code" || r.Form.Get("code") != "auth-code" || r.Form.Get("code_verifier") != "verifier" || r.Form.Get("client_id") != "app-key" || r.Form.Get("redirect_uri") != "http://127.0.0.1:17653/callback" {
+			t.Fatalf("form=%#v", r.Form)
+		}
+		_ = json.NewEncoder(w).Encode(OAuthToken{AccessToken: "access", RefreshToken: "refresh", TokenType: "bearer", ExpiresIn: 14400, Scope: "files.metadata.read", AccountID: "acct"})
+	}))
+	defer srv.Close()
+
+	tok, err := NewOAuthClientWithHTTP("app-key", srv.Client(), srv.URL+"/oauth2").ExchangePKCECode(context.Background(), "auth-code", "verifier", "http://127.0.0.1:17653/callback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok.AccessToken != "access" || tok.RefreshToken != "refresh" || tok.AccountID != "acct" {
+		t.Fatalf("token=%#v", tok)
+	}
+}

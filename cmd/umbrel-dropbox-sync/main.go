@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,6 +80,7 @@ Commands:
   auth status [--token-file PATH]
   auth save --token-env DROPBOX_TOKEN [--token-file PATH]
   auth device-code --client-id APP_KEY [--token-file PATH]
+  auth pkce --client-id APP_KEY [--redirect-uri URL|--redirect-port PORT] [--token-file PATH]
   remote-account --token-env DROPBOX_TOKEN
   sync --once --dry-run [--db PATH] [--root PATH] [--remote|--remote-delta] [--remote-path PATH] [--token-file PATH|--token-env DROPBOX_TOKEN]
   smoke-test --dry-run|--live --remote-path PATH [--token-file PATH|--token-env DROPBOX_TOKEN] [--i-understand-risk]
@@ -315,7 +318,7 @@ func cmdHash(args []string) {
 
 func cmdAuth(args []string) {
 	if len(args) < 1 {
-		fmt.Println("usage: auth status|save")
+		fmt.Println("usage: auth status|save|device-code|pkce")
 		os.Exit(2)
 	}
 	switch args[0] {
@@ -325,8 +328,10 @@ func cmdAuth(args []string) {
 		cmdAuthSave(args[1:])
 	case "device-code":
 		cmdAuthDeviceCode(args[1:])
+	case "pkce":
+		cmdAuthPKCE(args[1:])
 	default:
-		fmt.Println("usage: auth status|save")
+		fmt.Println("usage: auth status|save|device-code|pkce")
 		os.Exit(2)
 	}
 }
@@ -416,6 +421,91 @@ func cmdAuthDeviceCode(args []string) {
 			return
 		}
 	}
+}
+
+func cmdAuthPKCE(args []string) {
+	fs := flag.NewFlagSet("auth pkce", flag.ExitOnError)
+	clientID := fs.String("client-id", os.Getenv("DROPBOX_CLIENT_ID"), "Dropbox app key/client id")
+	redirectURI := fs.String("redirect-uri", "", "OAuth redirect URI registered with Dropbox")
+	redirectPort := fs.Int("redirect-port", 17653, "localhost callback port used when --redirect-uri is omitted")
+	tokenFile := fs.String("token-file", "", "secure token file path")
+	_ = fs.Parse(args)
+	if *clientID == "" {
+		fatal("missing Dropbox client id; pass --client-id or set DROPBOX_CLIENT_ID")
+	}
+	path := *tokenFile
+	if path == "" {
+		var err error
+		path, err = auth.DefaultTokenPath()
+		must(err)
+	}
+	uri := *redirectURI
+	if uri == "" {
+		uri = fmt.Sprintf("http://127.0.0.1:%d/callback", *redirectPort)
+	}
+	parsed, err := url.Parse(uri)
+	must(err)
+	if parsed.Scheme != "http" || parsed.Host == "" || parsed.Path == "" {
+		fatal("redirect URI must be a localhost http URL with a callback path, got %s", uri)
+	}
+	if parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "localhost" {
+		fatal("auth pkce callback only listens on localhost; got host %s", parsed.Hostname())
+	}
+	stateValue, err := dropbox.GenerateCodeVerifier()
+	must(err)
+	client := dropbox.NewOAuthClient(*clientID)
+	pkce, err := client.StartPKCEAuth(uri, stateValue, []string{"files.metadata.read", "files.content.read", "files.content.write"})
+	must(err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc(parsed.Path, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if got := q.Get("state"); got != stateValue {
+			http.Error(w, "state mismatch", http.StatusBadRequest)
+			errCh <- fmt.Errorf("oauth state mismatch")
+			return
+		}
+		code := q.Get("code")
+		if code == "" {
+			http.Error(w, "missing code", http.StatusBadRequest)
+			errCh <- fmt.Errorf("oauth callback missing code")
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprint(w, "<html><body><h1>Dropbox connected</h1><p>You can close this tab and return to the terminal.</p></body></html>")
+		codeCh <- code
+	})
+	server := &http.Server{Handler: mux}
+	ln, err := net.Listen("tcp", parsed.Host)
+	must(err)
+	defer ln.Close()
+	go func() {
+		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+	}()
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer shutdownCancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+	fmt.Printf("open: %s\nwaiting for Dropbox callback on %s\n", pkce.AuthorizeURL, uri)
+	var code string
+	select {
+	case <-ctx.Done():
+		fatal("pkce auth timed out: %v", ctx.Err())
+	case err := <-errCh:
+		must(err)
+	case code = <-codeCh:
+	}
+	tok, err := client.ExchangePKCECode(ctx, code, pkce.CodeVerifier, uri)
+	must(err)
+	must(auth.SaveToken(path, auth.TokenFromDropbox(tok.AccessToken, tok.RefreshToken, tok.TokenType, tok.ExpiresIn, tok.AccountID, tok.Scope, time.Now())))
+	fmt.Printf("token saved path=%s account_id=%s scope=%s\n", path, tok.AccountID, tok.Scope)
 }
 
 func cmdRemoteAccount(args []string) {
