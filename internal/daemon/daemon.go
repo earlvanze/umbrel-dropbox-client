@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"time"
@@ -107,26 +108,71 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 func (d *Daemon) HealthHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/healthz" && r.URL.Path != "/status" {
+		switch r.URL.Path {
+		case "/", "/ui":
+			d.serveDashboard(w, r)
+		case "/healthz", "/status":
+			d.serveStatusJSON(w, r)
+		case "/conflicts":
+			d.serveConflictsJSON(w, r)
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		st, err := d.store.Status()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":          true,
-			"root":        st.Root,
-			"paused":      st.Paused,
-			"entries":     st.Entries,
-			"pending_ops": st.PendingOps,
-			"conflicts":   st.Conflicts,
-			"last_event":  st.LastEvent,
-		})
 	})
+}
+
+func (d *Daemon) serveStatusJSON(w http.ResponseWriter, _ *http.Request) {
+	st, err := d.store.Status()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":          true,
+		"root":        st.Root,
+		"paused":      st.Paused,
+		"entries":     st.Entries,
+		"pending_ops": st.PendingOps,
+		"conflicts":   st.Conflicts,
+		"last_event":  st.LastEvent,
+	})
+}
+
+func (d *Daemon) serveConflictsJSON(w http.ResponseWriter, _ *http.Request) {
+	items, err := d.store.ListConflicts(50)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"conflicts": items})
+}
+
+func (d *Daemon) serveDashboard(w http.ResponseWriter, _ *http.Request) {
+	st, err := d.store.Status()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	conflicts, err := d.store.ListConflicts(10)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Umbrel Dropbox Client</title><style>body{font-family:system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;line-height:1.4}code{background:#f4f4f5;padding:.1rem .3rem;border-radius:.25rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}.card{border:1px solid #ddd;border-radius:.75rem;padding:1rem}.muted{color:#666}li{margin:.35rem 0}</style></head><body><h1>Umbrel Dropbox Client</h1><p class="muted">Dry-run-first sync dashboard. Live file transfer remains CLI-gated.</p><div class="grid"><div class="card"><strong>Paused</strong><br>%v</div><div class="card"><strong>Entries</strong><br>%d</div><div class="card"><strong>Pending ops</strong><br>%d</div><div class="card"><strong>Conflicts</strong><br>%d</div></div><p><strong>Root:</strong> <code>%s</code></p><p><strong>Last event:</strong> <code>%s</code></p><h2>Recent conflicts</h2>`, st.Paused, st.Entries, st.PendingOps, st.Conflicts, html.EscapeString(st.Root), html.EscapeString(st.LastEvent))
+	if len(conflicts) == 0 {
+		fmt.Fprint(w, `<p class="muted">No conflicts recorded.</p>`)
+	} else {
+		fmt.Fprint(w, "<ul>")
+		for _, c := range conflicts {
+			fmt.Fprintf(w, `<li><code>#%d</code> %s <span class="muted">%s</span></li>`, c.ID, html.EscapeString(c.Path), html.EscapeString(c.Reason))
+		}
+		fmt.Fprint(w, "</ul>")
+	}
+	fmt.Fprint(w, `<h2>Auth</h2><p>Authenticate from CLI: <code>umbrel-dropbox-client auth pkce --client-id APP_KEY</code></p><p><a href="/status">status JSON</a> · <a href="/conflicts">conflicts JSON</a></p></body></html>`)
 }
 
 func (d *Daemon) startHealth(ctx context.Context) func() {

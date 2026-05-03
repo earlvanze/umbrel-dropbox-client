@@ -1,5 +1,5 @@
 {
-  "status": "production foundation milestone 3 advanced: smoke-test harness added",
+  "status": "production foundation milestone 4 started: basic daemon web dashboard added",
   "safety": "full ACFS bootstrap installer was not run on Umbrel; only repo workflows/docs were adopted",
   "latest_commit": "dev/worker-queue-processor",
   "implemented": [
@@ -36,7 +36,8 @@
     "guarded delete review planning for local tombstones using non-destructive review ops only, with CLI enqueue support",
     "inotify/fsnotify watcher foundation with recursive directory registration, dynamic subdirectory watching, and ignored state-directory filtering tests",
     "watcher events wired into daemon cycle scheduling with debounce and end-to-end daemon test coverage",
-    "smoke-test CLI for throwaway dry-run validation and explicitly gated live Dropbox upload validation against a provided remote path"
+    "smoke-test CLI for throwaway dry-run validation and explicitly gated live Dropbox upload validation against a provided remote path",
+    "basic daemon web dashboard at / and /ui with status cards, recent conflicts, auth hint, and /conflicts JSON endpoint"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
@@ -45,5 +46,5 @@
     "add explicit reviewed delete execution gates after manual tombstone policy approval",
     "run smoke-test --live --i-understand-risk against a non-production Dropbox test folder after OAuth is validated"
   ],
-  "last_test": "go test ./... passed @ 2026-05-02T19:03:00Z"
+  "last_test": "go test ./... passed @ 2026-05-03T16:17:00Z"
 }

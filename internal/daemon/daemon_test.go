@@ -148,6 +148,37 @@ func (f fakeDaemonRemoteClient) ListFolderContinue(ctx context.Context, cursor s
 	return f.pages[cursor], nil
 }
 
+func TestDashboardHandlerReturnsHTMLAndConflictsJSON(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetConfig("root", "/tmp/root"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddConflict("/a.txt", "hash_mismatch", "/tmp/root/a.txt", "rev1"); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: "/tmp/root", DryRun: true}, s, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "Umbrel Dropbox Client") || !strings.Contains(rr.Body.String(), "/a.txt") {
+		t.Fatalf("body=%s", rr.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/conflicts", nil)
+	rr = httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"Path":"/a.txt"`) {
+		t.Fatalf("body=%s", rr.Body.String())
+	}
+}
+
 func TestRunCycleIngestsRemoteDeltaWhenConfigured(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600); err != nil {

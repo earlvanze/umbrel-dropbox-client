@@ -22,6 +22,7 @@ Implemented:
 - Daemon cycle now performs dry-run local scans, upserts entries, processes dry-run queue work, records audit events, and refuses daemon live mode until separately enabled.
 - Pause/resume state and CLI commands added; daemon skips cycles while paused.
 - Daemon health/status HTTP handler added for `/healthz` and `/status` JSON responses when `health_addr` is configured.
+- Basic daemon web dashboard added at `/` / `/ui`, with status cards, recent conflicts, auth hint, plus `/conflicts` JSON for Umbrel UI scaffolding.
 - `doctor` CLI added to validate DB initialization, sync root, token file hygiene, Dropbox DNS, and local state summary.
 - Deterministic dry-run integration fixture added for local scan + remote metadata reconciliation + queue/conflict persistence counts.
 - Remote cursor helpers added: Dropbox latest-cursor API, remote metadata application helper, and tests for file-only state ingestion.
