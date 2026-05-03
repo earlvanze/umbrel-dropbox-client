@@ -36,20 +36,23 @@ Implemented:
 - Inotify/fsnotify watcher foundation added with recursive directory registration, dynamic subdirectory watching, and ignored state-directory filtering tests.
 - Watcher events wired into daemon scheduling with debounce; watch-triggered cycles are tested end-to-end.
 - `smoke-test` CLI added for throwaway dry-run and explicitly gated live Dropbox upload validation against a provided remote path.
+- Explicit reviewed delete execution gates added: live worker delete handling now requires `--live --i-understand-risk --execute-reviewed-deletes`, a pending `review_*_delete` op, matching current `local_missing` entry state, and unchanged rev/id/hash before any remote delete or state prune path can complete.
 - Production task brief committed in `PRODUCTION_TASK.md`.
 
 Safety:
 - Current official Dropbox daemon was not touched.
 - Sync remains dry-run/scaffolded until live auth and reconciliation are reviewed.
+- Reviewed delete execution remains opt-in and disabled by default; ordinary `delete_local` / `delete_remote` pending ops remain unsupported.
 
 Next:
 1. Validate OAuth device-code flow against a non-production Dropbox test folder.
-2. Add explicit reviewed delete execution gates after manual tombstone policy approval.
-3. Run `smoke-test --live --i-understand-risk` against a non-production Dropbox test folder after OAuth is validated.
+2. Run `smoke-test --live --i-understand-risk` against a non-production Dropbox test folder after OAuth is validated.
 
 Validation:
-- `gofmt` completed.
-- `go test ./...` passed.
+- Files changed for reviewed delete gates: `cmd/umbrel-dropbox-client/main.go`, `internal/dropbox/client.go`, `internal/dropbox/client_test.go`, `internal/state/entries.go`, `internal/worker/delete_review.go`, `internal/worker/delete_review_test.go`, `STATUS.md`.
+- `gofmt` completed locally after worker handoff.
+- `go test ./...` passed locally after worker handoff.
+- Commit requested but not created in this worker environment: `.git` is mounted read-only and `git add` failed creating `.git/index.lock`.
 
 ## ACFS integration
 

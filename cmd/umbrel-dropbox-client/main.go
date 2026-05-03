@@ -85,7 +85,7 @@ Commands:
   sync --once --dry-run [--db PATH] [--root PATH] [--remote|--remote-delta] [--remote-path PATH] [--token-file PATH|--token-env DROPBOX_TOKEN]
   smoke-test --dry-run|--live --remote-path PATH [--token-file PATH|--token-env DROPBOX_TOKEN] [--i-understand-risk]
   worker --once --dry-run [--db PATH] [--limit N]
-  worker --once --live --i-understand-risk [--db PATH] [--root PATH] [--limit N] [--token-file PATH|--token-env DROPBOX_TOKEN]
+  worker --once --live --i-understand-risk [--execute-reviewed-deletes] [--db PATH] [--root PATH] [--limit N] [--token-file PATH|--token-env DROPBOX_TOKEN]
 
 MVP scaffold. Live transfers require explicit --live --i-understand-risk gates.`)
 }
@@ -693,6 +693,7 @@ func cmdWorker(args []string) {
 	fs := flag.NewFlagSet("worker", flag.ExitOnError)
 	dry := fs.Bool("dry-run", false, "validate and complete queued work without local or remote writes")
 	live := fs.Bool("live", false, "execute guarded live upload/download transfers")
+	executeReviewedDeletes := fs.Bool("execute-reviewed-deletes", false, "allow pending review_*_delete ops to execute under live gates")
 	ackRisk := fs.Bool("i-understand-risk", false, "required with --live")
 	once := fs.Bool("once", true, "process ready queue items once")
 	db := fs.String("db", filepath.Join(os.Getenv("HOME"), "Dropbox", defaultDB), "state database path")
@@ -742,7 +743,11 @@ func cmdWorker(args []string) {
 		if token == "" {
 			fatal("missing access token; pass --token-file or set %s", *tokenEnv)
 		}
-		handler = worker.TransferHandler{Store: s, Client: dropbox.New(token), Root: root, AllowLive: true}
+		dbx := dropbox.New(token)
+		handler = worker.LiveHandler{
+			Transfer: worker.TransferHandler{Store: s, Client: dbx, Root: root, AllowLive: true},
+			Deletes:  worker.ReviewedDeleteHandler{Store: s, Client: dbx, AllowLive: true, AllowReviewedDeletes: *executeReviewedDeletes},
+		}
 		mode = "live"
 	}
 	p := worker.Processor{Store: s, Handler: handler}

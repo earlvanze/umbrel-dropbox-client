@@ -194,6 +194,16 @@ func (c *Client) Download(ctx context.Context, dropboxPath string, out io.Writer
 	return &meta, nil
 }
 
+func (c *Client) DeleteFile(ctx context.Context, dropboxPath string) (*Metadata, error) {
+	var out struct {
+		Metadata Metadata `json:"metadata"`
+	}
+	if err := c.rpc(ctx, c.apiURL+"/files/delete_v2", map[string]any{"path": dropboxPath}, &out); err != nil {
+		return nil, err
+	}
+	return &out.Metadata, nil
+}
+
 func (c *Client) content(ctx context.Context, url string, arg any, body io.Reader, metaOut any, writers ...io.Writer) error {
 	if body == nil {
 		body = bytes.NewReader(nil)

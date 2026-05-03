@@ -79,3 +79,31 @@ func TestListFolderLatestCursor(t *testing.T) {
 		t.Fatalf("cursor=%q", cursor)
 	}
 }
+
+func TestDeleteFileUsesDeleteV2(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/files/delete_v2" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Fatalf("authorization header = %q", got)
+		}
+		var req map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatal(err)
+		}
+		if req["path"] != "/gone.txt" {
+			t.Fatalf("request=%#v", req)
+		}
+		_, _ = w.Write([]byte(`{"metadata":{".tag":"file","path_lower":"/gone.txt","rev":"r-del"}}`))
+	}))
+	defer srv.Close()
+
+	meta, err := NewWithHTTP("test-token", srv.Client(), srv.URL).DeleteFile(context.Background(), "/gone.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.PathLower != "/gone.txt" || meta.Rev != "r-del" {
+		t.Fatalf("meta=%#v", meta)
+	}
+}
