@@ -71,7 +71,7 @@ type ListFolderResult struct {
 
 func (c *Client) CurrentAccount(ctx context.Context) (*Account, error) {
 	var out Account
-	if err := c.rpc(ctx, c.apiURL+"/users/get_current_account", map[string]any{}, &out); err != nil {
+	if err := c.rpc(ctx, c.apiURL+"/users/get_current_account", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -235,6 +235,9 @@ func (c *Client) content(ctx context.Context, url string, arg any, body io.Reade
 }
 
 func (c *Client) rpc(ctx context.Context, url string, in any, out any) error {
+	if in == nil {
+		in = json.RawMessage("null")
+	}
 	b, err := json.Marshal(in)
 	if err != nil {
 		return err
