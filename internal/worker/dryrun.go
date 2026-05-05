@@ -38,6 +38,10 @@ func (h DryRunHandler) HandleOp(ctx context.Context, op state.PendingOp) error {
 		if planned.Rev == "" && planned.DropboxID == "" {
 			return fmt.Errorf("download_remote %s missing rev/dropbox_id", planned.Path)
 		}
+	case reconcile.OpReviewLocalDelete, reconcile.OpReviewRemoteDelete:
+		if planned.Reason == "" {
+			return fmt.Errorf("%s %s missing review reason", planned.Op, planned.Path)
+		}
 	default:
 		return fmt.Errorf("unsupported pending op %q for %s", planned.Op, planned.Path)
 	}
