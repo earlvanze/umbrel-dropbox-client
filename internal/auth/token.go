@@ -19,16 +19,18 @@ type Token struct {
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 	AccountID    string    `json:"account_id,omitempty"`
 	Scope        string    `json:"scope,omitempty"`
+	ClientID     string    `json:"client_id,omitempty"`
 }
 
 type Status struct {
-	Path       string
-	Present    bool
-	TokenType  string
-	AccountID  string
-	Scope      string
-	ExpiresAt  time.Time
-	HasRefresh bool
+	Path        string
+	Present     bool
+	TokenType   string
+	AccountID   string
+	Scope       string
+	ExpiresAt   time.Time
+	HasRefresh  bool
+	HasClientID bool
 }
 
 func DefaultTokenPath() (string, error) {
@@ -130,5 +132,6 @@ func TokenStatus(path string) (Status, error) {
 	out.Scope = tok.Scope
 	out.ExpiresAt = tok.ExpiresAt
 	out.HasRefresh = tok.RefreshToken != ""
+	out.HasClientID = tok.ClientID != ""
 	return out, nil
 }

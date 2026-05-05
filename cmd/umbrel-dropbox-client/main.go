@@ -79,6 +79,7 @@ Commands:
   hash PATH
   auth status [--token-file PATH]
   auth save --token-env DROPBOX_TOKEN [--token-file PATH]
+  auth refresh [--client-id APP_KEY] [--token-file PATH]
   auth device-code --client-id APP_KEY [--token-file PATH]
   auth pkce --client-id APP_KEY [--redirect-uri URL|--redirect-port PORT] [--token-file PATH]
   remote-account --token-env DROPBOX_TOKEN
@@ -318,7 +319,7 @@ func cmdHash(args []string) {
 
 func cmdAuth(args []string) {
 	if len(args) < 1 {
-		fmt.Println("usage: auth status|save|device-code|pkce")
+		fmt.Println("usage: auth status|save|refresh|device-code|pkce")
 		os.Exit(2)
 	}
 	switch args[0] {
@@ -326,12 +327,14 @@ func cmdAuth(args []string) {
 		cmdAuthStatus(args[1:])
 	case "save":
 		cmdAuthSave(args[1:])
+	case "refresh":
+		cmdAuthRefresh(args[1:])
 	case "device-code":
 		cmdAuthDeviceCode(args[1:])
 	case "pkce":
 		cmdAuthPKCE(args[1:])
 	default:
-		fmt.Println("usage: auth status|save|device-code|pkce")
+		fmt.Println("usage: auth status|save|refresh|device-code|pkce")
 		os.Exit(2)
 	}
 }
@@ -352,7 +355,7 @@ func cmdAuthStatus(args []string) {
 		fmt.Printf("token: missing path=%s\n", st.Path)
 		return
 	}
-	fmt.Printf("token: present path=%s token_type=%s account_id=%s has_refresh=%v expires_at=%s scope=%s\n", st.Path, st.TokenType, st.AccountID, st.HasRefresh, st.ExpiresAt.Format(time.RFC3339), st.Scope)
+	fmt.Printf("token: present path=%s token_type=%s account_id=%s has_refresh=%v has_client_id=%v expires_at=%s scope=%s\n", st.Path, st.TokenType, st.AccountID, st.HasRefresh, st.HasClientID, st.ExpiresAt.Format(time.RFC3339), st.Scope)
 }
 
 func cmdAuthSave(args []string) {
@@ -372,6 +375,45 @@ func cmdAuthSave(args []string) {
 	}
 	must(auth.SaveToken(path, auth.Token{AccessToken: token}))
 	fmt.Printf("token saved path=%s\n", path)
+}
+
+func cmdAuthRefresh(args []string) {
+	fs := flag.NewFlagSet("auth refresh", flag.ExitOnError)
+	clientID := fs.String("client-id", os.Getenv("DROPBOX_CLIENT_ID"), "Dropbox app key/client id")
+	tokenFile := fs.String("token-file", "", "secure token file path")
+	_ = fs.Parse(args)
+	path := *tokenFile
+	if path == "" {
+		var err error
+		path, err = auth.DefaultTokenPath()
+		must(err)
+	}
+	tok, err := auth.LoadToken(path)
+	must(err)
+	cid := *clientID
+	if cid == "" {
+		cid = tok.ClientID
+	}
+	if cid == "" {
+		fatal("missing Dropbox client id; pass --client-id, set DROPBOX_CLIENT_ID, or re-run auth pkce with the latest binary")
+	}
+	if tok.RefreshToken == "" {
+		fatal("token file has no refresh token; re-run auth pkce")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	refreshed, err := dropbox.NewOAuthClient(cid).RefreshToken(ctx, tok.RefreshToken)
+	must(err)
+	next := auth.TokenFromDropbox(refreshed.AccessToken, refreshed.RefreshToken, refreshed.TokenType, refreshed.ExpiresIn, refreshed.AccountID, refreshed.Scope, time.Now())
+	if next.AccountID == "" {
+		next.AccountID = tok.AccountID
+	}
+	if next.Scope == "" {
+		next.Scope = tok.Scope
+	}
+	next.ClientID = cid
+	must(auth.SaveToken(path, next))
+	fmt.Printf("token refreshed path=%s account_id=%s scope=%s\n", path, next.AccountID, next.Scope)
 }
 
 func cmdAuthDeviceCode(args []string) {
@@ -416,7 +458,9 @@ func cmdAuthDeviceCode(args []string) {
 				}
 				must(err)
 			}
-			must(auth.SaveToken(path, auth.TokenFromDropbox(tok.AccessToken, tok.RefreshToken, tok.TokenType, tok.ExpiresIn, tok.AccountID, tok.Scope, time.Now())))
+			saved := auth.TokenFromDropbox(tok.AccessToken, tok.RefreshToken, tok.TokenType, tok.ExpiresIn, tok.AccountID, tok.Scope, time.Now())
+			saved.ClientID = *clientID
+			must(auth.SaveToken(path, saved))
 			fmt.Printf("token saved path=%s account_id=%s scope=%s\n", path, tok.AccountID, tok.Scope)
 			return
 		}
@@ -504,7 +548,9 @@ func cmdAuthPKCE(args []string) {
 	}
 	tok, err := client.ExchangePKCECode(ctx, code, pkce.CodeVerifier, uri)
 	must(err)
-	must(auth.SaveToken(path, auth.TokenFromDropbox(tok.AccessToken, tok.RefreshToken, tok.TokenType, tok.ExpiresIn, tok.AccountID, tok.Scope, time.Now())))
+	saved := auth.TokenFromDropbox(tok.AccessToken, tok.RefreshToken, tok.TokenType, tok.ExpiresIn, tok.AccountID, tok.Scope, time.Now())
+	saved.ClientID = *clientID
+	must(auth.SaveToken(path, saved))
 	fmt.Printf("token saved path=%s account_id=%s scope=%s\n", path, tok.AccountID, tok.Scope)
 }
 
@@ -774,7 +820,30 @@ func loadAccessToken(tokenFile, tokenEnv string) string {
 	if tokenFile != "" {
 		tok, err := auth.LoadToken(tokenFile)
 		must(err)
-		return tok.AccessToken
+		if tok.ExpiresAt.IsZero() || time.Now().Before(tok.ExpiresAt.Add(-1*time.Minute)) {
+			return tok.AccessToken
+		}
+		clientID := tok.ClientID
+		if clientID == "" {
+			clientID = os.Getenv("DROPBOX_CLIENT_ID")
+		}
+		if tok.RefreshToken == "" || clientID == "" {
+			fatal("access token expired and cannot refresh; run auth refresh --client-id APP_KEY or auth pkce --client-id APP_KEY")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		refreshed, err := dropbox.NewOAuthClient(clientID).RefreshToken(ctx, tok.RefreshToken)
+		must(err)
+		next := auth.TokenFromDropbox(refreshed.AccessToken, refreshed.RefreshToken, refreshed.TokenType, refreshed.ExpiresIn, refreshed.AccountID, refreshed.Scope, time.Now())
+		if next.AccountID == "" {
+			next.AccountID = tok.AccountID
+		}
+		if next.Scope == "" {
+			next.Scope = tok.Scope
+		}
+		next.ClientID = clientID
+		must(auth.SaveToken(tokenFile, next))
+		return next.AccessToken
 	}
 	token := os.Getenv(tokenEnv)
 	if token == "" {
