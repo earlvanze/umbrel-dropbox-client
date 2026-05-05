@@ -7,6 +7,7 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/earlvanze/umbrel-dropbox-client/internal/auth"
@@ -281,16 +282,52 @@ func (d *Daemon) ingestRemoteDelta(ctx context.Context) (state.RemoteDeltaStats,
 		if d.cfg.TokenFile == "" {
 			return state.RemoteDeltaStats{}, fmt.Errorf("remote_delta requires token_file")
 		}
-		tok, err := auth.LoadToken(d.cfg.TokenFile)
+		accessToken, err := d.loadDropboxAccessToken(ctx)
 		if err != nil {
 			return state.RemoteDeltaStats{}, err
 		}
-		if tok.AccessToken == "" {
-			return state.RemoteDeltaStats{}, fmt.Errorf("remote_delta token_file has no access token")
-		}
-		client = dropbox.New(tok.AccessToken)
+		client = dropbox.New(accessToken)
 	}
 	return d.store.IngestRemoteDelta(ctx, client, d.cfg.RemotePath)
+}
+
+func (d *Daemon) loadDropboxAccessToken(ctx context.Context) (string, error) {
+	if d.cfg.TokenFile == "" {
+		return "", fmt.Errorf("remote_delta requires token_file")
+	}
+	tok, err := auth.LoadToken(d.cfg.TokenFile)
+	if err != nil {
+		return "", err
+	}
+	if tok.AccessToken == "" {
+		return "", fmt.Errorf("remote_delta token_file has no access token")
+	}
+	if tok.ExpiresAt.IsZero() || time.Now().Before(tok.ExpiresAt.Add(-1*time.Minute)) {
+		return tok.AccessToken, nil
+	}
+	clientID := tok.ClientID
+	if clientID == "" {
+		clientID = os.Getenv("DROPBOX_CLIENT_ID")
+	}
+	if clientID == "" || tok.RefreshToken == "" {
+		return "", fmt.Errorf("remote_delta token expired and cannot refresh; run auth refresh --client-id APP_KEY")
+	}
+	refreshed, err := dropbox.NewOAuthClient(clientID).RefreshToken(ctx, tok.RefreshToken)
+	if err != nil {
+		return "", err
+	}
+	next := auth.TokenFromDropbox(refreshed.AccessToken, refreshed.RefreshToken, refreshed.TokenType, refreshed.ExpiresIn, refreshed.AccountID, refreshed.Scope, time.Now())
+	if next.AccountID == "" {
+		next.AccountID = tok.AccountID
+	}
+	if next.Scope == "" {
+		next.Scope = tok.Scope
+	}
+	next.ClientID = clientID
+	if err := auth.SaveToken(d.cfg.TokenFile, next); err != nil {
+		return "", err
+	}
+	return next.AccessToken, nil
 }
 
 func (d *Daemon) startWatcher(ctx context.Context) (<-chan watch.Event, func()) {
