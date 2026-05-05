@@ -43,27 +43,28 @@
     "sandbox pilot dry-run daemon is running with remote_delta=true, watch debounce, health endpoint at 127.0.0.1:17655",
     "SQLite state store now sets busy_timeout and single open connection to reduce cross-process daemon/worker lock contention",
     "scanner ignores atomic .download-*.tmp files created during guarded downloads",
-    "sandbox pilot download path verified with remote-only file: live worker processed=1 completed=1 failed=0 and no overwrite occurred"
+    "sandbox pilot download path verified with remote-only file: live worker processed=1 completed=1 failed=0 and no overwrite occurred",
+    "dry-run worker now validates review_local_delete/review_remote_delete ops without performing deletes",
+    "sandbox tombstone/review-delete flow verified: deleted local sandbox file became local_missing, missing-local enqueued review_remote_delete, dry-run worker completed review op non-destructively"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_client to upstream ACFS checksums.yaml if accepted",
-    "add explicit reviewed delete execution gates after manual tombstone policy approval",
     "continue sandbox daemon soak and inspect health/events after multiple scan intervals",
-    "exercise conflict/tombstone review flow in sandbox without enabling reviewed deletes by default",
     "inspect recorded sandbox conflict for /sandbox-pilot/hello.txt and validate conflict UX/reporting",
-    "exercise tombstone/review-delete flow in sandbox without enabling reviewed deletes by default"
+    "decide whether to add a manual remote-exists aware review-delete enqueue mode before PR",
+    "prepare PR for supervisor/local-soak-test-20260505 with sandbox evidence"
   ],
-  "last_test": "go test ./... passed @ 2026-05-05T17:23:00+02:00",
+  "last_test": "go test ./... passed @ 2026-05-05T17:32:00+02:00",
   "pilot": {
     "root": "/home/umbrel/umbrel-dropbox-client-pilot-live",
     "db": "/home/umbrel/umbrel-dropbox-client-pilot-live/.umbrel-dropbox-client/state.db",
     "remote_path": "/sandbox-pilot",
     "health": "http://127.0.0.1:17655/status",
     "mode": "dry-run daemon soak with remote_delta/watch; live transfers only via guarded CLI worker",
-    "last_verified": "2026-05-05T17:25:08+02:00",
+    "last_verified": "2026-05-05T17:43:50+02:00",
     "last_status": {
-      "entries": 5,
+      "entries": 4,
       "pending_ops": 0,
       "conflicts": 1
     },
@@ -77,6 +78,13 @@
       "completed": 1,
       "failed": 0,
       "remote_path": "/sandbox-pilot/remote-only-download-2.txt"
+    },
+    "tombstone_review": {
+      "path": "/sandbox-pilot/remote-only-download-2.txt",
+      "state": "local_missing",
+      "queued": "review_remote_delete",
+      "dry_run_completed": true,
+      "live_delete_executed": false
     }
   }
 }
