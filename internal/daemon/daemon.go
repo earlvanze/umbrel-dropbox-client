@@ -51,6 +51,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	_ = d.store.Event("daemon.start", d.cfg.Root)
 	shutdownHealth := d.startHealth(ctx)
 	defer shutdownHealth()
+	watchEvents, stopWatch := d.startWatcher(ctx)
+	defer stopWatch()
 	if _, err := d.RunCycle(ctx); err != nil {
 		return err
 	}
@@ -60,8 +62,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	watchEvents, stopWatch := d.startWatcher(ctx)
-	defer stopWatch()
 	debounce := d.watchDebounce()
 	var debounceTimer *time.Timer
 	var debounceC <-chan time.Time
@@ -317,6 +317,9 @@ func (d *Daemon) loadDropboxAccessToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	next := auth.TokenFromDropbox(refreshed.AccessToken, refreshed.RefreshToken, refreshed.TokenType, refreshed.ExpiresIn, refreshed.AccountID, refreshed.Scope, time.Now())
+	if next.RefreshToken == "" {
+		next.RefreshToken = tok.RefreshToken
+	}
 	if next.AccountID == "" {
 		next.AccountID = tok.AccountID
 	}

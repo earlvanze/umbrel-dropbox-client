@@ -45,7 +45,9 @@
     "scanner ignores atomic .download-*.tmp files created during guarded downloads",
     "sandbox pilot download path verified with remote-only file: live worker processed=1 completed=1 failed=0 and no overwrite occurred",
     "dry-run worker now validates review_local_delete/review_remote_delete ops without performing deletes",
-    "sandbox tombstone/review-delete flow verified: deleted local sandbox file became local_missing, missing-local enqueued review_remote_delete, dry-run worker completed review op non-destructively"
+    "sandbox tombstone/review-delete flow verified: deleted local sandbox file became local_missing, missing-local enqueued review_remote_delete, dry-run worker completed review op non-destructively",
+    "daemon now starts filesystem watcher before initial cycle to avoid missing early post-start events in CI",
+    "daemon token refresh preserves existing refresh token when Dropbox omits a replacement refresh_token"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
@@ -55,7 +57,7 @@
     "decide whether to add a manual remote-exists aware review-delete enqueue mode before PR",
     "prepare PR for supervisor/local-soak-test-20260505 with sandbox evidence"
   ],
-  "last_test": "go test ./... passed @ 2026-05-05T17:32:00+02:00",
+  "last_test": "go test ./... passed @ 2026-05-05T18:57:00+02:00",
   "pilot": {
     "root": "$PILOT_ROOT",
     "db": "$PILOT_ROOT/.umbrel-dropbox-client/state.db",
