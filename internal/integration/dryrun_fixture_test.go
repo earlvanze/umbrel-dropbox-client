@@ -81,7 +81,7 @@ func TestDryRunFixtureProducesDeterministicPlanAndQueueCounts(t *testing.T) {
 	}
 }
 
-func writeFile(t *testing.T, path, body string) {
+func writeFile(t testing.TB, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
-func contentHash(t *testing.T, path string) string {
+func contentHash(t testing.TB, path string) string {
 	t.Helper()
 	h, err := hash.DropboxContentHash(path)
 	if err != nil {
@@ -100,7 +100,7 @@ func contentHash(t *testing.T, path string) string {
 	return h
 }
 
-func hashString(t *testing.T, body string) string {
+func hashString(t testing.TB, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "blob")
 	writeFile(t, path, body)
