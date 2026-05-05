@@ -43,10 +43,21 @@ func TestWalkIgnoresAtomicDownloadTempFiles(t *testing.T) {
 		}
 	}
 	must(os.WriteFile(filepath.Join(root, ".download-123.tmp"), []byte("partial"), 0600))
+	must(os.WriteFile(filepath.Join(root, ".download-123"), []byte("not partial"), 0600))
+	must(os.WriteFile(filepath.Join(root, "work.tmp"), []byte("not atomic"), 0600))
 	must(os.WriteFile(filepath.Join(root, "real.txt"), []byte("real"), 0600))
 	files, err := Walk(root, DefaultOptions())
 	must(err)
-	if len(files) != 1 || files[0].Path != "real.txt" {
+	seen := map[string]bool{}
+	for _, f := range files {
+		seen[f.Path] = true
+	}
+	for _, want := range []string{".download-123", "real.txt", "work.tmp"} {
+		if !seen[want] {
+			t.Fatalf("missing %s in files=%#v", want, files)
+		}
+	}
+	if seen[".download-123.tmp"] || len(files) != 3 {
 		t.Fatalf("files=%#v", files)
 	}
 }

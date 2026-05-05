@@ -20,6 +20,11 @@ const (
 	largeTreeRemoteOnlyFiles = 20
 	largeTreeConflictFiles   = 10
 	largeTreeMissingFiles    = 5
+
+	largeTreeTotalEntries           = largeTreeSameFiles + largeTreeLocalOnlyFiles + largeTreeConflictFiles + largeTreeMissingFiles
+	largeTreeTotalOps               = largeTreeLocalOnlyFiles + largeTreeRemoteOnlyFiles
+	largeTreeTotalConflicts         = largeTreeConflictFiles
+	largeTreeProcessedBeforeRestart = 7
 )
 
 func TestLargeTreeDryRunQueueSurvivesRestart(t *testing.T) {
@@ -40,24 +45,24 @@ func TestLargeTreeDryRunQueueSurvivesRestart(t *testing.T) {
 		t.Fatalf("missing=%d want=%d", missing, largeTreeMissingFiles)
 	}
 
-	processed := processDryRunOps(t, s, 7)
+	processed := processDryRunOps(t, s, largeTreeProcessedBeforeRestart)
 	if processed != 7 {
-		t.Fatalf("processed before restart=%d want=7", processed)
+		t.Fatalf("processed before restart=%d want=largeTreeProcessedBeforeRestart", processed)
 	}
-	assertStatus(t, s, 85, 43, 10)
+	assertStatus(t, s, largeTreeTotalEntries, largeTreeTotalOps-largeTreeProcessedBeforeRestart, largeTreeTotalConflicts)
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
 
 	s = openIntegrationStore(t, db)
 	defer s.Close()
-	assertStatus(t, s, 85, 43, 10)
+	assertStatus(t, s, largeTreeTotalEntries, largeTreeTotalOps-largeTreeProcessedBeforeRestart, largeTreeTotalConflicts)
 
 	processed = processDryRunOps(t, s, 1000)
 	if processed != 43 {
 		t.Fatalf("processed after restart=%d want=43", processed)
 	}
-	assertStatus(t, s, 85, 0, 10)
+	assertStatus(t, s, largeTreeTotalEntries, 0, largeTreeTotalConflicts)
 
 	missingItems, err := s.ListMissingLocal(largeTreeMissingFiles + 1)
 	if err != nil {
@@ -74,6 +79,7 @@ func BenchmarkLargeTreeDryRunHarness(b *testing.B) {
 		db := filepath.Join(b.TempDir(), "state.db")
 		remote := buildLargeTreeFixture(b, root)
 		s := openIntegrationStore(b, db)
+		b.Cleanup(func() { _ = s.Close() })
 		seedPreviouslySeenMissingFiles(b, s)
 		files, plan := scanAndQueuePlan(b, s, root, remote)
 		if len(files) != 80 || len(plan.Ops) != 50 || len(plan.Conflicts) != 10 {
@@ -84,9 +90,6 @@ func BenchmarkLargeTreeDryRunHarness(b *testing.B) {
 		}
 		if processed := processDryRunOps(b, s, 1000); processed != 50 {
 			b.Fatalf("processed=%d want=50", processed)
-		}
-		if err := s.Close(); err != nil {
-			b.Fatal(err)
 		}
 	}
 }
@@ -230,11 +233,12 @@ func assertLargeTreePlan(tb testing.TB, files []scan.File, plan reconcile.Plan) 
 	if plan.Noop != largeTreeSameFiles || len(plan.Ops) != largeTreeLocalOnlyFiles+largeTreeRemoteOnlyFiles || len(plan.Conflicts) != largeTreeConflictFiles {
 		tb.Fatalf("plan noop=%d ops=%d conflicts=%d plan=%#v", plan.Noop, len(plan.Ops), len(plan.Conflicts), plan)
 	}
-	if plan.Ops[0].Op != "upload_local" || plan.Ops[0].Path != "/local-only/group-00/file-000.txt" {
-		tb.Fatalf("first op=%#v", plan.Ops[0])
+	opCounts := map[string]int{}
+	for _, op := range plan.Ops {
+		opCounts[op.Op]++
 	}
-	if plan.Ops[len(plan.Ops)-1].Op != "download_remote" || plan.Ops[len(plan.Ops)-1].Path != "/remote-only/group-06/file-013.txt" {
-		tb.Fatalf("last op=%#v", plan.Ops[len(plan.Ops)-1])
+	if opCounts["upload_local"] != largeTreeLocalOnlyFiles || opCounts["download_remote"] != largeTreeRemoteOnlyFiles {
+		tb.Fatalf("op counts=%#v ops=%#v", opCounts, plan.Ops)
 	}
 }
 

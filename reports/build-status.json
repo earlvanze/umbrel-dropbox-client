@@ -57,8 +57,8 @@
   ],
   "last_test": "go test ./... passed @ 2026-05-05T17:32:00+02:00",
   "pilot": {
-    "root": "/home/umbrel/umbrel-dropbox-client-pilot-live",
-    "db": "/home/umbrel/umbrel-dropbox-client-pilot-live/.umbrel-dropbox-client/state.db",
+    "root": "$PILOT_ROOT",
+    "db": "$PILOT_ROOT/.umbrel-dropbox-client/state.db",
     "remote_path": "/sandbox-pilot",
     "health": "http://127.0.0.1:17655/status",
     "mode": "dry-run daemon soak with remote_delta/watch; live transfers only via guarded CLI worker",

@@ -19,15 +19,11 @@ type Status struct {
 }
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(`pragma busy_timeout = 5000`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
 	return &Store{db: db}, nil
 }
 func (s *Store) Close() error { return s.db.Close() }

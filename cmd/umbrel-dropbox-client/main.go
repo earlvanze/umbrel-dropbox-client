@@ -405,6 +405,9 @@ func cmdAuthRefresh(args []string) {
 	refreshed, err := dropbox.NewOAuthClient(cid).RefreshToken(ctx, tok.RefreshToken)
 	must(err)
 	next := auth.TokenFromDropbox(refreshed.AccessToken, refreshed.RefreshToken, refreshed.TokenType, refreshed.ExpiresIn, refreshed.AccountID, refreshed.Scope, time.Now())
+	if next.RefreshToken == "" {
+		next.RefreshToken = tok.RefreshToken
+	}
 	if next.AccountID == "" {
 		next.AccountID = tok.AccountID
 	}
@@ -820,6 +823,9 @@ func loadAccessToken(tokenFile, tokenEnv string) string {
 	if tokenFile != "" {
 		tok, err := auth.LoadToken(tokenFile)
 		must(err)
+		if tok.AccessToken == "" {
+			fatal("token file has no access token; re-run auth pkce")
+		}
 		if tok.ExpiresAt.IsZero() || time.Now().Before(tok.ExpiresAt.Add(-1*time.Minute)) {
 			return tok.AccessToken
 		}
@@ -835,6 +841,9 @@ func loadAccessToken(tokenFile, tokenEnv string) string {
 		refreshed, err := dropbox.NewOAuthClient(clientID).RefreshToken(ctx, tok.RefreshToken)
 		must(err)
 		next := auth.TokenFromDropbox(refreshed.AccessToken, refreshed.RefreshToken, refreshed.TokenType, refreshed.ExpiresIn, refreshed.AccountID, refreshed.Scope, time.Now())
+		if next.RefreshToken == "" {
+			next.RefreshToken = tok.RefreshToken
+		}
 		if next.AccountID == "" {
 			next.AccountID = tok.AccountID
 		}
