@@ -34,3 +34,19 @@ func TestDropboxPath(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestWalkIgnoresAtomicDownloadTempFiles(t *testing.T) {
+	root := t.TempDir()
+	must := func(err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(os.WriteFile(filepath.Join(root, ".download-123.tmp"), []byte("partial"), 0600))
+	must(os.WriteFile(filepath.Join(root, "real.txt"), []byte("real"), 0600))
+	files, err := Walk(root, DefaultOptions())
+	must(err)
+	if len(files) != 1 || files[0].Path != "real.txt" {
+		t.Fatalf("files=%#v", files)
+	}
+}
