@@ -47,7 +47,10 @@
     "dry-run worker now validates review_local_delete/review_remote_delete ops without performing deletes",
     "sandbox tombstone/review-delete flow verified: deleted local sandbox file became local_missing, missing-local enqueued review_remote_delete, dry-run worker completed review op non-destructively",
     "daemon now starts filesystem watcher before initial cycle to avoid missing early post-start events in CI",
-    "daemon token refresh preserves existing refresh token when Dropbox omits a replacement refresh_token"
+    "daemon token refresh preserves existing refresh token when Dropbox omits a replacement refresh_token",
+    "SQLite busy timeout is configured in the SQLite DSN without forcing a single shared connection, avoiding MarkMissingLocal self-deadlock risk",
+    "CLI and daemon token refresh paths support refresh-only token files when client_id and refresh_token are available",
+    "live worker token-file path now uses shared auto-refresh access token loader"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
@@ -57,7 +60,7 @@
     "decide whether to add a manual remote-exists aware review-delete enqueue mode before PR",
     "prepare PR for supervisor/local-soak-test-20260505 with sandbox evidence"
   ],
-  "last_test": "go test ./... passed @ 2026-05-05T18:57:00+02:00",
+  "last_test": "go test ./... passed @ 2026-05-06T04:52:00+02:00",
   "pilot": {
     "root": "$PILOT_ROOT",
     "db": "$PILOT_ROOT/.umbrel-dropbox-client/state.db",

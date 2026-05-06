@@ -299,10 +299,7 @@ func (d *Daemon) loadDropboxAccessToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if tok.AccessToken == "" {
-		return "", fmt.Errorf("remote_delta token_file has no access token")
-	}
-	if tok.ExpiresAt.IsZero() || time.Now().Before(tok.ExpiresAt.Add(-1*time.Minute)) {
+	if tok.AccessToken != "" && (tok.ExpiresAt.IsZero() || time.Now().Before(tok.ExpiresAt.Add(-1*time.Minute))) {
 		return tok.AccessToken, nil
 	}
 	clientID := tok.ClientID
@@ -310,6 +307,9 @@ func (d *Daemon) loadDropboxAccessToken(ctx context.Context) (string, error) {
 		clientID = os.Getenv("DROPBOX_CLIENT_ID")
 	}
 	if clientID == "" || tok.RefreshToken == "" {
+		if tok.AccessToken == "" {
+			return "", fmt.Errorf("remote_delta token_file has no access token and cannot refresh; run auth pkce --client-id APP_KEY")
+		}
 		return "", fmt.Errorf("remote_delta token expired and cannot refresh; run auth refresh --client-id APP_KEY")
 	}
 	refreshed, err := dropbox.NewOAuthClient(clientID).RefreshToken(ctx, tok.RefreshToken)

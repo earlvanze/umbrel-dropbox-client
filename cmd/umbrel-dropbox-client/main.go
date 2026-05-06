@@ -781,17 +781,7 @@ func cmdWorker(args []string) {
 		if root == "" {
 			fatal("missing sync root; run init --root PATH or pass --root PATH")
 		}
-		token := ""
-		if *tokenFile != "" {
-			tok, err := auth.LoadToken(*tokenFile)
-			must(err)
-			token = tok.AccessToken
-		} else {
-			token = os.Getenv(*tokenEnv)
-		}
-		if token == "" {
-			fatal("missing access token; pass --token-file or set %s", *tokenEnv)
-		}
+		token := loadAccessToken(*tokenFile, *tokenEnv)
 		dbx := dropbox.New(token)
 		handler = worker.LiveHandler{
 			Transfer: worker.TransferHandler{Store: s, Client: dbx, Root: root, AllowLive: true},
@@ -823,10 +813,7 @@ func loadAccessToken(tokenFile, tokenEnv string) string {
 	if tokenFile != "" {
 		tok, err := auth.LoadToken(tokenFile)
 		must(err)
-		if tok.AccessToken == "" {
-			fatal("token file has no access token; re-run auth pkce")
-		}
-		if tok.ExpiresAt.IsZero() || time.Now().Before(tok.ExpiresAt.Add(-1*time.Minute)) {
+		if tok.AccessToken != "" && (tok.ExpiresAt.IsZero() || time.Now().Before(tok.ExpiresAt.Add(-1*time.Minute))) {
 			return tok.AccessToken
 		}
 		clientID := tok.ClientID
@@ -834,6 +821,9 @@ func loadAccessToken(tokenFile, tokenEnv string) string {
 			clientID = os.Getenv("DROPBOX_CLIENT_ID")
 		}
 		if tok.RefreshToken == "" || clientID == "" {
+			if tok.AccessToken == "" {
+				fatal("token file has no access token and cannot refresh; run auth pkce --client-id APP_KEY")
+			}
 			fatal("access token expired and cannot refresh; run auth refresh --client-id APP_KEY or auth pkce --client-id APP_KEY")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -2,6 +2,7 @@ package state
 
 import (
 	"database/sql"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,11 +20,14 @@ type Status struct {
 }
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
+	u := url.URL{Scheme: "file", Path: path}
+	q := u.Query()
+	q.Set("_pragma", "busy_timeout(5000)")
+	u.RawQuery = q.Encode()
+	db, err := sql.Open("sqlite", u.String())
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
 	return &Store{db: db}, nil
 }
 func (s *Store) Close() error { return s.db.Close() }
