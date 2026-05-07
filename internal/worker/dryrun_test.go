@@ -54,6 +54,52 @@ func TestDryRunHandlerRetriesInvalidDownload(t *testing.T) {
 	}
 }
 
+func TestDryRunHandlerCompletesReviewDeleteWithoutDeleting(t *testing.T) {
+	s := testStore(t)
+	id, err := s.EnqueueOp(reconcile.OpReviewRemoteDelete, "/gone.txt", reconcile.PlannedOp{Op: reconcile.OpReviewRemoteDelete, Path: "/gone.txt", Reason: "local file missing and remote not observed; review tombstone before pruning state"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Processor{Store: s, Handler: DryRunHandler{Store: s}, Now: fixedNow}
+	res, err := p.ProcessOne(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Completed || res.OpID != id {
+		t.Fatalf("result=%#v", res)
+	}
+	st, err := s.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PendingOps != 0 || st.LastEvent == "" {
+		t.Fatalf("status=%#v", st)
+	}
+}
+
+func TestDryRunHandlerRetriesMissingReasonForReviewDelete(t *testing.T) {
+	s := testStore(t)
+	id, err := s.EnqueueOp(reconcile.OpReviewRemoteDelete, "/gone.txt", reconcile.PlannedOp{Op: reconcile.OpReviewRemoteDelete, Path: "/gone.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Processor{Store: s, Handler: DryRunHandler{Store: s}, Now: fixedNow}
+	res, err := p.ProcessOne(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Processed || res.Completed || res.OpID != id || res.Err == nil {
+		t.Fatalf("result=%#v", res)
+	}
+	st, err := s.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PendingOps == 0 || st.LastEvent == "" {
+		t.Fatalf("status=%#v", st)
+	}
+}
+
 func TestDryRunHandlerRejectsUnsupportedOp(t *testing.T) {
 	s := testStore(t)
 	id, err := s.EnqueueOp("delete_local", "/danger.txt", nil)

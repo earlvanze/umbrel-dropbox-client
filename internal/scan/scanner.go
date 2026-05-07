@@ -40,6 +40,10 @@ func Walk(root string, opts Options) ([]File, error) {
 			}
 			return nil
 		}
+		name := d.Name()
+		if strings.HasPrefix(name, ".download-") && strings.HasSuffix(name, ".tmp") {
+			return nil
+		}
 		info, err := d.Info()
 		if err != nil {
 			return err

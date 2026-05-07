@@ -92,6 +92,7 @@ func (p Processor) ProcessOne(ctx context.Context) (Result, error) {
 
 	attempt := op.Attempts + 1
 	if attempt >= p.maxAttempts() {
+		_ = p.Store.Event("worker.fail", handleErr.Error())
 		if err := p.Store.FailOp(op.ID, handleErr.Error()); err != nil {
 			return Result{}, err
 		}
@@ -99,6 +100,7 @@ func (p Processor) ProcessOne(ctx context.Context) (Result, error) {
 	}
 
 	retryAt := now.Add(p.retryDelay(op.Attempts, handleErr))
+	_ = p.Store.Event("worker.retry", handleErr.Error())
 	if err := p.Store.RetryOp(op.ID, retryAt, handleErr.Error()); err != nil {
 		return Result{}, err
 	}

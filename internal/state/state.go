@@ -2,6 +2,7 @@ package state
 
 import (
 	"database/sql"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,7 +20,11 @@ type Status struct {
 }
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	u := url.URL{Scheme: "file", Path: path}
+	q := u.Query()
+	q.Set("_pragma", "busy_timeout(5000)")
+	u.RawQuery = q.Encode()
+	db, err := sql.Open("sqlite", u.String())
 	if err != nil {
 		return nil, err
 	}
