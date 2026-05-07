@@ -62,6 +62,10 @@ func (h TransferHandler) HandleOp(ctx context.Context, op state.PendingOp) error
 }
 
 func (h TransferHandler) upload(ctx context.Context, planned reconcile.PlannedOp, localPath string) error {
+	dropboxPath := planned.RemotePath
+	if dropboxPath == "" {
+		dropboxPath = planned.Path
+	}
 	if planned.ContentHash != "" {
 		got, err := hash.DropboxContentHash(localPath)
 		if err != nil {
@@ -71,7 +75,7 @@ func (h TransferHandler) upload(ctx context.Context, planned reconcile.PlannedOp
 			return fmt.Errorf("upload_local %s content hash changed", planned.Path)
 		}
 	}
-	meta, err := h.Client.UploadFile(ctx, planned.Path, localPath)
+	meta, err := h.Client.UploadFile(ctx, dropboxPath, localPath)
 	if err != nil {
 		return err
 	}
@@ -79,12 +83,16 @@ func (h TransferHandler) upload(ctx context.Context, planned reconcile.PlannedOp
 }
 
 func (h TransferHandler) download(ctx context.Context, planned reconcile.PlannedOp, localPath string) error {
+	dropboxPath := planned.RemotePath
+	if dropboxPath == "" {
+		dropboxPath = planned.Path
+	}
 	if _, err := os.Stat(localPath); err == nil {
 		return fmt.Errorf("download_remote %s refused to overwrite existing local file", planned.Path)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	meta, err := h.Client.DownloadFile(ctx, planned.Path, localPath)
+	meta, err := h.Client.DownloadFile(ctx, dropboxPath, localPath)
 	if err != nil {
 		return err
 	}

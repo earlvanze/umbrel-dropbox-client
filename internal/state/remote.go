@@ -1,12 +1,17 @@
 package state
 
 import (
+	"strings"
 	"time"
 
 	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
 )
 
 func (s *Store) ApplyRemoteMetadata(entries []dropbox.Metadata) (int, error) {
+	return s.ApplyRemoteMetadataWithBase(entries, "")
+}
+
+func (s *Store) ApplyRemoteMetadataWithBase(entries []dropbox.Metadata, remoteBase string) (int, error) {
 	applied := 0
 	for _, e := range entries {
 		if e.Tag != "file" {
@@ -16,6 +21,7 @@ func (s *Store) ApplyRemoteMetadata(entries []dropbox.Metadata) (int, error) {
 		if path == "" {
 			path = e.PathDisplay
 		}
+		path = stripRemoteBase(path, remoteBase)
 		if path == "" {
 			continue
 		}
@@ -29,4 +35,20 @@ func (s *Store) ApplyRemoteMetadata(entries []dropbox.Metadata) (int, error) {
 		applied++
 	}
 	return applied, nil
+}
+
+func stripRemoteBase(path, base string) string {
+	path = normalizeEntryPath(path)
+	base = normalizeEntryPath(base)
+	if base == "" {
+		return path
+	}
+	if path == base {
+		return ""
+	}
+	prefix := strings.TrimSuffix(base, "/") + "/"
+	if strings.HasPrefix(path, prefix) {
+		return normalizeEntryPath(strings.TrimPrefix(path, prefix))
+	}
+	return path
 }

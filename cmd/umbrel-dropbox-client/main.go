@@ -631,7 +631,7 @@ func cmdSync(args []string) {
 			entries, cursor, err := client.ListFolderAll(ctx, *remotePath, true)
 			must(err)
 			remoteEntries = entries
-			applied, err := s.ApplyRemoteMetadata(entries)
+			applied, err := s.ApplyRemoteMetadataWithBase(entries, *remotePath)
 			must(err)
 			remoteFiles = applied
 			must(s.SetConfig(state.DropboxCursorKey, cursor))
@@ -639,7 +639,7 @@ func cmdSync(args []string) {
 	}
 	planOps, planConflicts, planNoop := 0, 0, 0
 	if *remote {
-		plan := reconcile.BuildDryRunPlan(files, remoteEntries)
+		plan := reconcile.BuildDryRunPlanWithRemoteBase(files, remoteEntries, *remotePath)
 		planNoop = plan.Noop
 		for _, op := range plan.Ops {
 			if _, created, err := s.EnqueueOpIfMissing(op.Op, op.Path, op); err != nil {
