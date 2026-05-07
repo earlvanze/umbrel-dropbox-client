@@ -1,7 +1,5 @@
 package state
 
-import "strings"
-
 type MissingLocal struct {
 	Path        string
 	DropboxID   string
@@ -12,6 +10,12 @@ type MissingLocal struct {
 }
 
 func (s *Store) MarkMissingLocal(seen map[string]bool) (int, error) {
+	normalizedSeen := make(map[string]bool, len(seen))
+	for path, ok := range seen {
+		if ok {
+			normalizedSeen[normalizeEntryPath(path)] = true
+		}
+	}
 	rows, err := s.db.Query(`select path from entries where state in ('local_scanned','clean')`)
 	if err != nil {
 		return 0, err
@@ -23,7 +27,7 @@ func (s *Store) MarkMissingLocal(seen map[string]bool) (int, error) {
 		if err := rows.Scan(&path); err != nil {
 			return 0, err
 		}
-		if !seen[normalizeEntryPath(path)] {
+		if !normalizedSeen[normalizeEntryPath(path)] {
 			missing = append(missing, path)
 		}
 	}
@@ -56,15 +60,4 @@ func (s *Store) ListMissingLocal(limit int) ([]MissingLocal, error) {
 		out = append(out, item)
 	}
 	return out, rows.Err()
-}
-
-func normalizeEntryPath(path string) string {
-	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
-	if path == "" || path == "." || path == "/" {
-		return ""
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return strings.ToLower(path)
 }

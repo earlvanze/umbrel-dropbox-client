@@ -37,3 +37,23 @@ func TestBuildDryRunPlanUploadDownloadConflictAndNoop(t *testing.T) {
 		t.Fatalf("unexpected conflicts: %#v", plan.Conflicts)
 	}
 }
+
+func TestBuildDryRunPlanWithRemoteBaseUsesLocalRelativePaths(t *testing.T) {
+	local := []scan.File{{Path: "note.md", AbsPath: "/tmp/Obsidian/note.md", ContentHash: "same", Size: 4}}
+	remote := []dropbox.Metadata{{Tag: "file", PathLower: "/obsidian/note.md", Rev: "r1", ContentHash: "same", Size: 4}}
+
+	plan := BuildDryRunPlanWithRemoteBase(local, remote, "/Obsidian")
+	if plan.Noop != 1 || len(plan.Ops) != 0 || len(plan.Conflicts) != 0 {
+		t.Fatalf("plan=%#v", plan)
+	}
+
+	plan = BuildDryRunPlanWithRemoteBase(nil, []dropbox.Metadata{{Tag: "file", PathLower: "/obsidian/remote.md", Rev: "r2", ContentHash: "remote", Size: 6}}, "/Obsidian")
+	if len(plan.Ops) != 1 || plan.Ops[0].Op != "download_remote" || plan.Ops[0].Path != "/remote.md" || plan.Ops[0].RemotePath != "/obsidian/remote.md" {
+		t.Fatalf("download plan=%#v", plan)
+	}
+
+	plan = BuildDryRunPlanWithRemoteBase([]scan.File{{Path: "local.md", AbsPath: "/tmp/Obsidian/local.md", ContentHash: "local", Size: 5}}, nil, "/Obsidian")
+	if len(plan.Ops) != 1 || plan.Ops[0].Op != "upload_local" || plan.Ops[0].Path != "/local.md" || plan.Ops[0].RemotePath != "/obsidian/local.md" {
+		t.Fatalf("upload plan=%#v", plan)
+	}
+}

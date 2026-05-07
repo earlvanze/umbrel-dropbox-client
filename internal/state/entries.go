@@ -2,6 +2,7 @@ package state
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -16,6 +17,10 @@ type Entry struct {
 }
 
 func (s *Store) UpsertEntry(e Entry) error {
+	e.Path = normalizeEntryPath(e.Path)
+	if e.Path == "" {
+		return fmt.Errorf("state: upsert entry path normalizes to empty")
+	}
 	state := e.State
 	if state == "" {
 		state = "clean"
@@ -33,6 +38,7 @@ func (s *Store) UpsertEntry(e Entry) error {
 }
 
 func (s *Store) EntryByPath(path string) (*Entry, error) {
+	path = normalizeEntryPath(path)
 	row := s.db.QueryRow(`select path, coalesce(dropbox_id,''), coalesce(rev,''), coalesce(content_hash,''), size, mtime_unix, state from entries where path = ?`, path)
 	var out Entry
 	var mtime int64
@@ -47,6 +53,7 @@ func (s *Store) EntryByPath(path string) (*Entry, error) {
 }
 
 func (s *Store) DeleteEntry(path string) error {
+	path = normalizeEntryPath(path)
 	_, err := s.db.Exec(`delete from entries where path = ?`, path)
 	return err
 }

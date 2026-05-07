@@ -44,7 +44,7 @@ func TestIngestRemoteDeltaPersistsCursorAfterApplyingFiles(t *testing.T) {
 	if stats.PreviousCursor != "" || stats.Cursor != "c2" || stats.Pages != 2 || stats.Entries != 3 || stats.AppliedFiles != 2 {
 		t.Fatalf("stats=%#v", stats)
 	}
-	cursor, err := s.GetConfig(DropboxCursorKey)
+	cursor, err := s.GetConfig(DropboxCursorKeyForPath(""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestIngestRemoteDeltaUsesStoredCursor(t *testing.T) {
 	if err := s.Init(); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetConfig(DropboxCursorKey, "stored"); err != nil {
+	if err := s.SetConfig(DropboxCursorKeyForPath(""), "stored"); err != nil {
 		t.Fatal(err)
 	}
 	client := &fakeRemoteDeltaClient{pages: map[string]*dropbox.ListFolderResult{
@@ -84,5 +84,88 @@ func TestIngestRemoteDeltaUsesStoredCursor(t *testing.T) {
 	}
 	if stats.PreviousCursor != "stored" || stats.Cursor != "next" || stats.AppliedFiles != 1 {
 		t.Fatalf("stats=%#v", stats)
+	}
+}
+
+func TestIngestRemoteDeltaStripsRemoteBase(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteDeltaClient{pages: map[string]*dropbox.ListFolderResult{
+		"": {Entries: []dropbox.Metadata{{Tag: "file", PathLower: "/obsidian/note.md", Rev: "r1"}}, Cursor: "c1", HasMore: false},
+	}}
+	stats, err := s.IngestRemoteDelta(context.Background(), client, "/Obsidian")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.AppliedFiles != 1 {
+		t.Fatalf("stats=%#v", stats)
+	}
+	entry, err := s.EntryByPath("/note.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry == nil || entry.Path != "/note.md" || entry.Rev != "r1" {
+		t.Fatalf("entry=%#v", entry)
+	}
+	if full, err := s.EntryByPath("/obsidian/note.md"); err != nil || full != nil {
+		t.Fatalf("full=%#v err=%v", full, err)
+	}
+}
+
+func TestDropboxCursorKeyForPath(t *testing.T) {
+	cases := map[string]string{
+		"":          "dropbox_cursor:root",
+		"/":         "dropbox_cursor:root",
+		"Obsidian":  "dropbox_cursor:/obsidian",
+		"/Obsidian": "dropbox_cursor:/obsidian",
+	}
+	for input, want := range cases {
+		if got := DropboxCursorKeyForPath(input); got != want {
+			t.Fatalf("key(%q)=%q want %q", input, got, want)
+		}
+	}
+}
+
+func TestIngestRemoteDeltaScopesCursorByRemotePath(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetConfig(DropboxCursorKeyForPath("/other"), "other-cursor"); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteDeltaClient{pages: map[string]*dropbox.ListFolderResult{
+		"": {Entries: []dropbox.Metadata{{Tag: "file", PathLower: "/obsidian/note.md", Rev: "r1"}}, Cursor: "obsidian-cursor", HasMore: false},
+	}}
+	stats, err := s.IngestRemoteDelta(context.Background(), client, "/Obsidian")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.PreviousCursor != "" || stats.Cursor != "obsidian-cursor" || client.listCalls != 1 || len(client.continueCalls) != 0 {
+		t.Fatalf("stats=%#v client=%#v", stats, client)
+	}
+	got, err := s.GetConfig(DropboxCursorKeyForPath("/Obsidian"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "obsidian-cursor" {
+		t.Fatalf("obsidian cursor=%q", got)
+	}
+	other, err := s.GetConfig(DropboxCursorKeyForPath("/other"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other != "other-cursor" {
+		t.Fatalf("other cursor=%q", other)
 	}
 }
