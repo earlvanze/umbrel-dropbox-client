@@ -46,3 +46,19 @@ func TestUpsertEntryNormalizesPaths(t *testing.T) {
 		t.Fatalf("status after delete=%#v", st)
 	}
 }
+
+func TestUpsertEntryRejectsEmptyNormalizedPath(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"", ".", "/"} {
+		if err := s.UpsertEntry(Entry{Path: path, ContentHash: "h1", Size: 1, MTime: time.Now(), State: "local_scanned"}); err == nil {
+			t.Fatalf("expected error for path %q", path)
+		}
+	}
+}

@@ -58,7 +58,10 @@
     "remote delta ingestion now strips configured remote_path for scoped canary daemon runs",
     "MarkMissingLocal normalizes seen paths before tombstone comparison to avoid false local_missing on case-only path differences",
     "second dry-run canaries passed: OpenClaw local_files=45 remote_files=45 planned_ops=0 conflicts=0, Health local_files=101 remote_files=101 planned_ops=0 conflicts=0",
-    "Obsidian dry-run daemon soak passed initial and follow-up cycles: entries=131 pending_ops=0 conflicts=0 local_missing=0"
+    "Obsidian dry-run daemon soak passed initial and follow-up cycles: entries=131 pending_ops=0 conflicts=0 local_missing=0",
+    "remote delta cursors are now scoped by remote_path to prevent cross-scope cursor reuse",
+    "UpsertEntry rejects degenerate paths that normalize to empty",
+    "normalizeEntryPath moved to dedicated state path utility file"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
@@ -67,7 +70,7 @@
     "decide whether to add a manual remote-exists aware review-delete enqueue mode before PR",
     "open/review scoped-canary PR before any live production worker run"
   ],
-  "last_test": "go test ./... passed @ 2026-05-07T11:20:00+02:00",
+  "last_test": "go test ./... passed @ 2026-05-07T16:50:00+02:00",
   "pilot": {
     "root": "$PILOT_ROOT",
     "db": "$PILOT_ROOT/.umbrel-dropbox-client/state.db",
@@ -134,7 +137,9 @@
         "local_files": 45,
         "remote_files": 45,
         "planned_ops": 0,
-        "conflicts": 0
+        "conflicts": 0,
+        "pending_ops": 0,
+        "missing_local": 0
       },
       {
         "root": "$DROPBOX/Health",
@@ -142,7 +147,9 @@
         "local_files": 101,
         "remote_files": 101,
         "planned_ops": 0,
-        "conflicts": 0
+        "conflicts": 0,
+        "pending_ops": 0,
+        "missing_local": 0
       }
     ]
   }

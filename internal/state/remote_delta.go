@@ -9,6 +9,14 @@ import (
 
 const DropboxCursorKey = "dropbox_cursor"
 
+func DropboxCursorKeyForPath(remotePath string) string {
+	p := normalizeEntryPath(remotePath)
+	if p == "" {
+		return DropboxCursorKey + ":root"
+	}
+	return DropboxCursorKey + ":" + p
+}
+
 type RemoteDeltaClient interface {
 	ListFolder(ctx context.Context, path string, recursive bool) (*dropbox.ListFolderResult, error)
 	ListFolderContinue(ctx context.Context, cursor string) (*dropbox.ListFolderResult, error)
@@ -23,7 +31,8 @@ type RemoteDeltaStats struct {
 }
 
 func (s *Store) IngestRemoteDelta(ctx context.Context, client RemoteDeltaClient, remotePath string) (RemoteDeltaStats, error) {
-	cursor, err := s.GetConfig(DropboxCursorKey)
+	cursorKey := DropboxCursorKeyForPath(remotePath)
+	cursor, err := s.GetConfig(cursorKey)
 	if err != nil {
 		return RemoteDeltaStats{}, err
 	}
@@ -35,7 +44,7 @@ func (s *Store) IngestRemoteDelta(ctx context.Context, client RemoteDeltaClient,
 	if err != nil {
 		return RemoteDeltaStats{}, err
 	}
-	if err := s.SetConfig(DropboxCursorKey, delta.Cursor); err != nil {
+	if err := s.SetConfig(cursorKey, delta.Cursor); err != nil {
 		return RemoteDeltaStats{}, err
 	}
 	stats := RemoteDeltaStats{PreviousCursor: cursor, Cursor: delta.Cursor, Pages: delta.Pages, Entries: len(delta.Entries), AppliedFiles: applied}

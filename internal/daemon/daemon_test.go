@@ -196,7 +196,7 @@ func TestRunCycleIngestsRemoteDeltaWhenConfigured(t *testing.T) {
 	if stats.RemoteEntries != 1 || stats.RemoteAppliedFiles != 1 || stats.RemotePages != 1 || stats.LocalFiles != 1 {
 		t.Fatalf("stats=%#v", stats)
 	}
-	cursor, err := s.GetConfig(state.DropboxCursorKey)
+	cursor, err := s.GetConfig(state.DropboxCursorKeyForPath(""))
 	if err != nil {
 		t.Fatal(err)
 	}

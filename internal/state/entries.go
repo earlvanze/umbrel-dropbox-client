@@ -2,6 +2,7 @@ package state
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -17,6 +18,9 @@ type Entry struct {
 
 func (s *Store) UpsertEntry(e Entry) error {
 	e.Path = normalizeEntryPath(e.Path)
+	if e.Path == "" {
+		return fmt.Errorf("state: upsert entry path normalizes to empty")
+	}
 	state := e.State
 	if state == "" {
 		state = "clean"

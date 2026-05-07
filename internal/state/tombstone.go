@@ -1,7 +1,5 @@
 package state
 
-import "strings"
-
 type MissingLocal struct {
 	Path        string
 	DropboxID   string
@@ -62,15 +60,4 @@ func (s *Store) ListMissingLocal(limit int) ([]MissingLocal, error) {
 		out = append(out, item)
 	}
 	return out, rows.Err()
-}
-
-func normalizeEntryPath(path string) string {
-	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
-	if path == "" || path == "." || path == "/" {
-		return ""
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return strings.ToLower(path)
 }
