@@ -31,7 +31,7 @@ func (s *Store) IngestRemoteDelta(ctx context.Context, client RemoteDeltaClient,
 	if err != nil {
 		return RemoteDeltaStats{}, err
 	}
-	applied, err := s.ApplyRemoteMetadata(delta.Entries)
+	applied, err := s.ApplyRemoteMetadataWithBase(delta.Entries, remotePath)
 	if err != nil {
 		return RemoteDeltaStats{}, err
 	}

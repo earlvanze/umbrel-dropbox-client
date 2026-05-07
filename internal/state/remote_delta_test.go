@@ -86,3 +86,34 @@ func TestIngestRemoteDeltaUsesStoredCursor(t *testing.T) {
 		t.Fatalf("stats=%#v", stats)
 	}
 }
+
+func TestIngestRemoteDeltaStripsRemoteBase(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteDeltaClient{pages: map[string]*dropbox.ListFolderResult{
+		"": {Entries: []dropbox.Metadata{{Tag: "file", PathLower: "/obsidian/note.md", Rev: "r1"}}, Cursor: "c1", HasMore: false},
+	}}
+	stats, err := s.IngestRemoteDelta(context.Background(), client, "/Obsidian")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.AppliedFiles != 1 {
+		t.Fatalf("stats=%#v", stats)
+	}
+	entry, err := s.EntryByPath("/note.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry == nil || entry.Path != "/note.md" || entry.Rev != "r1" {
+		t.Fatalf("entry=%#v", entry)
+	}
+	if full, err := s.EntryByPath("/obsidian/note.md"); err != nil || full != nil {
+		t.Fatalf("full=%#v err=%v", full, err)
+	}
+}

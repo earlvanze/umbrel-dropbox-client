@@ -179,3 +179,47 @@ func mustHashBytes(t *testing.T, b []byte) string {
 	}
 	return mustHashPath(path)
 }
+
+func TestTransferHandlerUsesRemotePathForScopedUploadAndDownload(t *testing.T) {
+	root := t.TempDir()
+	local := filepath.Join(root, "note.md")
+	if err := os.WriteFile(local, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	uploadHash := mustHashPath(local)
+	s := testStore(t)
+	client := &fakeTransferClient{}
+	if _, err := s.EnqueueOp("upload_local", "/note.md", reconcile.PlannedOp{Op: "upload_local", Path: "/note.md", RemotePath: "/obsidian/note.md", LocalPath: local, ContentHash: uploadHash}); err != nil {
+		t.Fatal(err)
+	}
+	p := Processor{Store: s, Handler: TransferHandler{Store: s, Client: client, Root: root, AllowLive: true}, Now: fixedNow}
+	res, err := p.ProcessOne(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Completed || client.uploadPath != "/obsidian/note.md" || client.uploadLocal != local {
+		t.Fatalf("result=%#v client=%#v", res, client)
+	}
+
+	downloadLocal := filepath.Join(root, "remote.md")
+	client.downloadFn = func(path, local string) (*dropbox.Metadata, error) {
+		if path != "/obsidian/remote.md" || local != downloadLocal {
+			t.Fatalf("path=%s local=%s", path, local)
+		}
+		if err := os.WriteFile(local, []byte("payload"), 0600); err != nil {
+			return nil, err
+		}
+		return &dropbox.Metadata{Tag: "file", ID: "id:3", Rev: "r3", PathLower: path, Size: 7, ServerMtime: fixedNow()}, nil
+	}
+	downloadHash := mustHashBytes(t, []byte("payload"))
+	if _, err := s.EnqueueOp("download_remote", "/remote.md", reconcile.PlannedOp{Op: "download_remote", Path: "/remote.md", RemotePath: "/obsidian/remote.md", Rev: "r3", ContentHash: downloadHash}); err != nil {
+		t.Fatal(err)
+	}
+	res, err = p.ProcessOne(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Completed {
+		t.Fatalf("result=%#v", res)
+	}
+}

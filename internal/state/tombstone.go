@@ -12,6 +12,12 @@ type MissingLocal struct {
 }
 
 func (s *Store) MarkMissingLocal(seen map[string]bool) (int, error) {
+	normalizedSeen := make(map[string]bool, len(seen))
+	for path, ok := range seen {
+		if ok {
+			normalizedSeen[normalizeEntryPath(path)] = true
+		}
+	}
 	rows, err := s.db.Query(`select path from entries where state in ('local_scanned','clean')`)
 	if err != nil {
 		return 0, err
@@ -23,7 +29,7 @@ func (s *Store) MarkMissingLocal(seen map[string]bool) (int, error) {
 		if err := rows.Scan(&path); err != nil {
 			return 0, err
 		}
-		if !seen[normalizeEntryPath(path)] {
+		if !normalizedSeen[normalizeEntryPath(path)] {
 			missing = append(missing, path)
 		}
 	}

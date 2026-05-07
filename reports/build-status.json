@@ -53,17 +53,21 @@
     "live worker token-file path now uses shared auto-refresh access token loader",
     "dry-run reconciliation supports scoped remote_path canaries by stripping the remote base for local-relative comparison while retaining remote_path for transfer execution",
     "state entries normalize Dropbox paths before upsert/lookup/delete to avoid duplicate local-vs-remote casing rows",
-    "Obsidian prod canary dry-run: local_files=131 remote_files=131 planned_ops=0 conflicts=0 noop=131 pending_ops=0 missing_local=0"
+    "Obsidian prod canary dry-run: local_files=131 remote_files=131 planned_ops=0 conflicts=0 noop=131 pending_ops=0 missing_local=0",
+    "added regression tests for normalized state entry paths and scoped remote_path upload/download transfer routing",
+    "remote delta ingestion now strips configured remote_path for scoped canary daemon runs",
+    "MarkMissingLocal normalizes seen paths before tombstone comparison to avoid false local_missing on case-only path differences",
+    "second dry-run canaries passed: OpenClaw local_files=45 remote_files=45 planned_ops=0 conflicts=0, Health local_files=101 remote_files=101 planned_ops=0 conflicts=0",
+    "Obsidian dry-run daemon soak passed initial and follow-up cycles: entries=131 pending_ops=0 conflicts=0 local_missing=0"
   ],
   "pending": [
     "add ACFS_REPO_DISPATCH_TOKEN secret if upstream dispatch is desired",
     "add umbrel_dropbox_client to upstream ACFS checksums.yaml if accepted",
     "inspect recorded sandbox conflict for /sandbox-pilot/hello.txt and validate conflict UX/reporting",
     "decide whether to add a manual remote-exists aware review-delete enqueue mode before PR",
-    "open/review scoped-canary PR before any live production worker run",
-    "optionally run a second dry-run canary against another low-risk folder"
+    "open/review scoped-canary PR before any live production worker run"
   ],
-  "last_test": "go test ./... passed @ 2026-05-07T11:01:00+02:00",
+  "last_test": "go test ./... passed @ 2026-05-07T11:20:00+02:00",
   "pilot": {
     "root": "$PILOT_ROOT",
     "db": "$PILOT_ROOT/.umbrel-dropbox-client/state.db",
@@ -109,6 +113,37 @@
       "noop": 131,
       "pending_ops": 0,
       "missing_local": 0
-    }
+    },
+    "daemon_soak": {
+      "root": "$DROPBOX/Obsidian",
+      "remote_path": "/Obsidian",
+      "health": "http://127.0.0.1:17656/status",
+      "mode": "dry-run daemon remote_delta/watch",
+      "last_verified": "2026-05-07T11:21:14+02:00",
+      "result": {
+        "entries": 131,
+        "pending_ops": 0,
+        "conflicts": 0,
+        "local_missing": 0
+      }
+    },
+    "additional_dry_runs": [
+      {
+        "root": "$DROPBOX/OpenClaw",
+        "remote_path": "/OpenClaw",
+        "local_files": 45,
+        "remote_files": 45,
+        "planned_ops": 0,
+        "conflicts": 0
+      },
+      {
+        "root": "$DROPBOX/Health",
+        "remote_path": "/Health",
+        "local_files": 101,
+        "remote_files": 101,
+        "planned_ops": 0,
+        "conflicts": 0
+      }
+    ]
   }
 }

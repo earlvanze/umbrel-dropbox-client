@@ -39,3 +39,31 @@ func TestMarkMissingLocalAndList(t *testing.T) {
 		t.Fatalf("items=%#v", items)
 	}
 }
+
+func TestMarkMissingLocalNormalizesSeenPaths(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertEntry(Entry{Path: "/inbox/note.md", ContentHash: "h1", Size: 1, MTime: time.Now(), State: "local_scanned"}); err != nil {
+		t.Fatal(err)
+	}
+	count, err := s.MarkMissingLocal(map[string]bool{"/Inbox/Note.md": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("count=%d", count)
+	}
+	items, err := s.ListMissingLocal(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("items=%#v", items)
+	}
+}
