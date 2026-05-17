@@ -8,4 +8,13 @@ services:
       - ${APP_DATA_DIR}/data:/data
       - /home/umbrel/Dropbox:/dropbox
     environment:
-      - UDS_CONFIG=/data/config.json
+      - UDC_CONFIG=/data/config.json
+      - UDC_DB=/data/state.db
+      - UDC_ROOT=/dropbox/Obsidian
+      - UDC_REMOTE_PATH=/Obsidian
+      - UDC_TOKEN_FILE=/data/token.json
+      - UDC_REMOTE_DELTA=auto
+      - UDC_DRY_RUN=true
+      - UDC_WATCH=true
+      - UDC_SCAN_INTERVAL_SECONDS=300
+      - UDC_HEALTH_ADDR=0.0.0.0:8477

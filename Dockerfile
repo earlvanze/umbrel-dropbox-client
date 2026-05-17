@@ -4,9 +4,10 @@ COPY . .
 RUN go build -o /out/umbrel-dropbox-client ./cmd/umbrel-dropbox-client && go build -o /out/umbrel-dropbox-clientd ./cmd/umbrel-dropbox-clientd
 
 FROM alpine:3.22
-RUN adduser -D -h /home/sync sync
+RUN apk add --no-cache ca-certificates sqlite-libs
 COPY --from=build /out/umbrel-dropbox-client /usr/bin/umbrel-dropbox-client
 COPY --from=build /out/umbrel-dropbox-clientd /usr/bin/umbrel-dropbox-clientd
-USER sync
+COPY packaging/docker/umbrel-entrypoint.sh /usr/bin/umbrel-dropbox-client-umbrel-entrypoint
+RUN chmod +x /usr/bin/umbrel-dropbox-client-umbrel-entrypoint
 EXPOSE 8477
-CMD ["/usr/bin/umbrel-dropbox-client", "status", "--db", "/data/state.db"]
+ENTRYPOINT ["/usr/bin/umbrel-dropbox-client-umbrel-entrypoint"]

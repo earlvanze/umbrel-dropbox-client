@@ -48,6 +48,46 @@ func TestInstallScriptInitializesDaemonConfig(t *testing.T) {
 	}
 }
 
+func TestUmbrelAppPackagingStartsDryRunDaemon(t *testing.T) {
+	repo := repoRoot(t)
+	dockerfile := readFile(t, filepath.Join(repo, "Dockerfile"))
+	for _, want := range []string{
+		"umbrel-dropbox-client-umbrel-entrypoint",
+		"ENTRYPOINT [\"/usr/bin/umbrel-dropbox-client-umbrel-entrypoint\"]",
+		"EXPOSE 8477",
+	} {
+		if !strings.Contains(dockerfile, want) {
+			t.Fatalf("Dockerfile missing %q:\n%s", want, dockerfile)
+		}
+	}
+	entrypoint := readFile(t, filepath.Join(repo, "packaging/docker/umbrel-entrypoint.sh"))
+	for _, want := range []string{
+		"UDC_ROOT:-/dropbox/Obsidian",
+		"UDC_REMOTE_PATH:-/Obsidian",
+		"refusing to start Umbrel app with UDC_DRY_RUN",
+		"umbrel-dropbox-client init --root \"$ROOT\" --db \"$DB\"",
+		"exec umbrel-dropbox-clientd --config \"$CONFIG\"",
+		"\"dry_run\": true",
+		"\"health_addr\": \"$HEALTH_ADDR\"",
+	} {
+		if !strings.Contains(entrypoint, want) {
+			t.Fatalf("entrypoint missing %q:\n%s", want, entrypoint)
+		}
+	}
+	compose := readFile(t, filepath.Join(repo, "umbrel-app/docker-compose.yml"))
+	for _, want := range []string{
+		"8477:8477",
+		"/home/umbrel/Dropbox:/dropbox",
+		"UDC_DRY_RUN=true",
+		"UDC_ROOT=/dropbox/Obsidian",
+		"UDC_REMOTE_DELTA=auto",
+	} {
+		if !strings.Contains(compose, want) {
+			t.Fatalf("docker-compose missing %q:\n%s", want, compose)
+		}
+	}
+}
+
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()

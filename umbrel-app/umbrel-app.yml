@@ -5,8 +5,8 @@ tagline: Reliable Dropbox sync for Umbrel and Linux
 icon: https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-client/master/data/icons/icon.svg
 category: files
 description: >-
-  A Linux-first Dropbox sync daemon with durable queues, parallel transfers,
-  conservative conflict handling, and desktop integration.
+  A Linux-first Dropbox sync daemon for Umbrel. The app MVP starts in dry-run scoped mode,
+  shows status/conflicts in a web dashboard, and keeps live transfers behind explicit CLI gates.
 developer: Earl Co
 website: https://github.com/earlvanze/umbrel-dropbox-client
 repo: https://github.com/earlvanze/umbrel-dropbox-client
@@ -17,5 +17,5 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >-
-  Initial app-store scaffold.
+  Dry-run-first Umbrel app scaffold for scoped canary validation.
 dependencies: []
