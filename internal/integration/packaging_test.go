@@ -76,7 +76,9 @@ func TestUmbrelAppPackagingStartsDryRunDaemon(t *testing.T) {
 	}
 	compose := readFile(t, filepath.Join(repo, "umbrel-app/docker-compose.yml"))
 	for _, want := range []string{
-		"8477:8477",
+		"app_proxy:",
+		"APP_HOST: umbrel-dropbox-client_server_1",
+		"APP_PORT: 8477",
 		"/home/umbrel/Dropbox:/dropbox",
 		"UDC_DRY_RUN=true",
 		"UDC_ROOT=/dropbox/Obsidian",

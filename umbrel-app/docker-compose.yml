@@ -1,9 +1,14 @@
+version: "3.7"
+
 services:
-  app:
+  app_proxy:
+    environment:
+      APP_HOST: umbrel-dropbox-client_server_1
+      APP_PORT: 8477
+
+  server:
     image: ghcr.io/earlvanze/umbrel-dropbox-client:latest
     restart: unless-stopped
-    ports:
-      - "8477:8477"
     volumes:
       - ${APP_DATA_DIR}/data:/data
       - /home/umbrel/Dropbox:/dropbox
@@ -18,3 +23,4 @@ services:
       - UDC_WATCH=true
       - UDC_SCAN_INTERVAL_SECONDS=300
       - UDC_HEALTH_ADDR=0.0.0.0:8477
+    container_name: umbrel-dropbox-client_server_1
