@@ -5,6 +5,8 @@ services:
     environment:
       APP_HOST: umbrel-dropbox-client_server_1
       APP_PORT: 8477
+    ports:
+      - "8080:8477"
 
   server:
     image: ghcr.io/earlvanze/umbrel-dropbox-client:latest
