@@ -2,6 +2,7 @@ package scan
 
 import (
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -32,6 +33,9 @@ func Walk(root string, opts Options) ([]File, error) {
 	var out []File
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
 			return err
 		}
 		if d.IsDir() {
@@ -46,6 +50,9 @@ func Walk(root string, opts Options) ([]File, error) {
 		}
 		info, err := d.Info()
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
 			return err
 		}
 		rel, err := filepath.Rel(root, path)
@@ -54,6 +61,9 @@ func Walk(root string, opts Options) ([]File, error) {
 		}
 		h, err := hash.DropboxContentHash(path)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
 			return err
 		}
 		out = append(out, File{Path: filepath.ToSlash(rel), AbsPath: path, Size: info.Size(), ModTime: info.ModTime(), ContentHash: h})

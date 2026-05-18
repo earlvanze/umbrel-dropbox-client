@@ -179,6 +179,51 @@ func TestDashboardHandlerReturnsHTMLAndConflictsJSON(t *testing.T) {
 	}
 }
 
+func TestFilesHandlerBrowsesConfiguredRootReadOnly(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "nested", "a.txt"), []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: root, DryRun: true}, testStore(t), nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/files?path=nested", nil)
+	rr := httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "a.txt") || !strings.Contains(rr.Body.String(), "download") {
+		t.Fatalf("body=%s", rr.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/files?path=nested", nil)
+	rr = httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"name":"a.txt"`) {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/download?path=nested/a.txt", nil)
+	rr = httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || rr.Body.String() != "hello" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestFilesHandlerRejectsRootEscape(t *testing.T) {
+	d := New(config.Config{Root: t.TempDir(), DryRun: true}, testStore(t), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/files?path=../../", nil)
+	rr := httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("cleaned root traversal should resolve to root, code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestRunCycleIngestsRemoteDeltaWhenConfigured(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hello"), 0600); err != nil {

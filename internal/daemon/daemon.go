@@ -7,7 +7,12 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	slashpath "path"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/earlvanze/umbrel-dropbox-client/internal/auth"
@@ -112,6 +117,12 @@ func (d *Daemon) HealthHandler() http.Handler {
 		switch r.URL.Path {
 		case "/", "/ui":
 			d.serveDashboard(w, r)
+		case "/files":
+			d.serveFilesHTML(w, r)
+		case "/api/files":
+			d.serveFilesJSON(w, r)
+		case "/download":
+			d.serveDownload(w, r)
 		case "/healthz", "/status":
 			d.serveStatusJSON(w, r)
 		case "/conflicts":
@@ -173,7 +184,169 @@ func (d *Daemon) serveDashboard(w http.ResponseWriter, _ *http.Request) {
 		}
 		fmt.Fprint(w, "</ul>")
 	}
-	fmt.Fprint(w, `<h2>Auth</h2><p>Authenticate from CLI: <code>umbrel-dropbox-client auth pkce --client-id APP_KEY</code></p><p><a href="/status">status JSON</a> · <a href="/conflicts">conflicts JSON</a></p></body></html>`)
+	fmt.Fprint(w, `<h2>Auth</h2><p>Authenticate from CLI: <code>umbrel-dropbox-client auth pkce --client-id APP_KEY</code></p><p><a href="/files">local file manager</a> · <a href="/status">status JSON</a> · <a href="/conflicts">conflicts JSON</a></p></body></html>`)
+}
+
+type localFileItem struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Dir     bool   `json:"dir"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"modified"`
+}
+
+type localFileListing struct {
+	Root  string          `json:"root"`
+	Path  string          `json:"path"`
+	Items []localFileItem `json:"items"`
+}
+
+func (d *Daemon) serveFilesJSON(w http.ResponseWriter, r *http.Request) {
+	listing, err := d.localFileListing(r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(listing)
+}
+
+func (d *Daemon) serveFilesHTML(w http.ResponseWriter, r *http.Request) {
+	listing, err := d.localFileListing(r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local files - Umbrel Dropbox Client</title><style>body{font-family:system-ui,sans-serif;max-width:1040px;margin:2rem auto;padding:0 1rem;line-height:1.4;color:#18181b}a{color:#0061ff;text-decoration:none}a:hover{text-decoration:underline}.muted{color:#71717a}.top{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}.crumbs{margin:1rem 0;padding:.75rem 1rem;background:#f4f4f5;border-radius:.75rem}table{width:100%%;border-collapse:collapse;background:white;border:1px solid #e4e4e7;border-radius:.75rem;overflow:hidden}th,td{padding:.75rem;border-bottom:1px solid #eee;text-align:left}th{font-size:.85rem;color:#52525b;background:#fafafa}tr:last-child td{border-bottom:0}.name{font-weight:600}.size,.modified{white-space:nowrap}.pill{display:inline-block;font-size:.75rem;border:1px solid #d4d4d8;border-radius:999px;padding:.1rem .45rem;color:#52525b}</style></head><body><div class="top"><div><h1>Local files</h1><p class="muted">Read-only browser for the configured sync root.</p></div><p><a href="/">Dashboard</a> · <a href="/api/files?path=%s">JSON</a></p></div>`, html.EscapeString(url.QueryEscape(listing.Path)))
+	fmt.Fprintf(w, `<p><strong>Root:</strong> <code>%s</code></p><div class="crumbs">`, html.EscapeString(listing.Root))
+	fmt.Fprint(w, `<a href="/files">root</a>`)
+	if listing.Path != "" {
+		parts := strings.Split(listing.Path, "/")
+		for i, part := range parts {
+			crumb := strings.Join(parts[:i+1], "/")
+			fmt.Fprintf(w, ` / <a href="/files?path=%s">%s</a>`, html.EscapeString(url.QueryEscape(crumb)), html.EscapeString(part))
+		}
+	}
+	fmt.Fprint(w, `</div><table><thead><tr><th>Name</th><th>Kind</th><th>Size</th><th>Modified</th><th></th></tr></thead><tbody>`)
+	if listing.Path != "" {
+		parent := slashpath.Dir("/" + listing.Path)
+		if parent == "/" {
+			parent = ""
+		} else {
+			parent = strings.TrimPrefix(parent, "/")
+		}
+		fmt.Fprintf(w, `<tr><td class="name"><a href="/files?path=%s">..</a></td><td><span class="pill">folder</span></td><td></td><td></td><td></td></tr>`, html.EscapeString(url.QueryEscape(parent)))
+	}
+	for _, item := range listing.Items {
+		kind := "file"
+		link := "/download?path=" + url.QueryEscape(item.Path)
+		action := "download"
+		if item.Dir {
+			kind = "folder"
+			link = "/files?path=" + url.QueryEscape(item.Path)
+			action = "open"
+		}
+		fmt.Fprintf(w, `<tr><td class="name"><a href="%s">%s</a></td><td><span class="pill">%s</span></td><td class="size">%s</td><td class="modified">%s</td><td><a href="%s">%s</a></td></tr>`, html.EscapeString(link), html.EscapeString(item.Name), kind, html.EscapeString(formatBytes(item.Size, item.Dir)), html.EscapeString(item.ModTime), html.EscapeString(link), action)
+	}
+	fmt.Fprint(w, `</tbody></table></body></html>`)
+}
+
+func (d *Daemon) serveDownload(w http.ResponseWriter, r *http.Request) {
+	full, _, err := d.resolveLocalPath(r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	info, err := os.Stat(full)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if info.IsDir() {
+		http.Error(w, "cannot download a directory", http.StatusBadRequest)
+		return
+	}
+	http.ServeFile(w, r, full)
+}
+
+func (d *Daemon) localFileListing(rel string) (localFileListing, error) {
+	full, clean, err := d.resolveLocalPath(rel)
+	if err != nil {
+		return localFileListing{}, err
+	}
+	entries, err := os.ReadDir(full)
+	if err != nil {
+		return localFileListing{}, err
+	}
+	items := make([]localFileItem, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		name := entry.Name()
+		child := name
+		if clean != "" {
+			child = clean + "/" + name
+		}
+		items = append(items, localFileItem{Name: name, Path: child, Dir: info.IsDir(), Size: info.Size(), ModTime: info.ModTime().Format("2006-01-02 15:04:05")})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Dir != items[j].Dir {
+			return items[i].Dir
+		}
+		return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name)
+	})
+	return localFileListing{Root: d.cfg.Root, Path: clean, Items: items}, nil
+}
+
+func (d *Daemon) resolveLocalPath(rel string) (string, string, error) {
+	if d.cfg.Root == "" {
+		return "", "", fmt.Errorf("configured root is empty")
+	}
+	if strings.ContainsRune(rel, '\x00') {
+		return "", "", fmt.Errorf("invalid path")
+	}
+	clean := slashpath.Clean("/" + strings.TrimSpace(rel))
+	if clean == "/" || clean == "." {
+		clean = ""
+	} else {
+		clean = strings.TrimPrefix(clean, "/")
+	}
+	rootAbs, err := filepath.Abs(d.cfg.Root)
+	if err != nil {
+		return "", "", err
+	}
+	full := filepath.Join(rootAbs, filepath.FromSlash(clean))
+	fullAbs, err := filepath.Abs(full)
+	if err != nil {
+		return "", "", err
+	}
+	relToRoot, err := filepath.Rel(rootAbs, fullAbs)
+	if err != nil {
+		return "", "", err
+	}
+	if relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(os.PathSeparator)) {
+		return "", "", fmt.Errorf("path escapes configured root")
+	}
+	return fullAbs, clean, nil
+}
+
+func formatBytes(size int64, isDir bool) string {
+	if isDir {
+		return ""
+	}
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d B", size)
+	}
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(size)/float64(div), "KMGTPE"[exp])
 }
 
 func (d *Daemon) startHealth(ctx context.Context) func() {
