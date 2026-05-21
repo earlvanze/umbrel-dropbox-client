@@ -390,8 +390,8 @@ func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 		}
 		return CycleStats{Root: d.cfg.Root}, nil
 	}
-	if !d.cfg.DryRun {
-		return CycleStats{}, fmt.Errorf("daemon live mode is not enabled; use CLI worker --live for guarded transfers")
+	if !d.cfg.DryRun && !d.cfg.AllowLive {
+		return CycleStats{}, fmt.Errorf("daemon live mode requires allow_live=true")
 	}
 	remoteStats, err := d.ingestRemoteDelta(ctx)
 	if err != nil {
@@ -413,7 +413,11 @@ func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 		return CycleStats{}, err
 	}
 	limit := d.workerLimit()
-	p := worker.Processor{Store: d.store, Handler: worker.DryRunHandler{Store: d.store}}
+	handler, err := d.workerHandler(ctx)
+	if err != nil {
+		return CycleStats{}, err
+	}
+	p := worker.Processor{Store: d.store, Handler: handler}
 	stats := CycleStats{Root: d.cfg.Root, LocalFiles: len(files), WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles, LocalMissing: missing}
 	for stats.WorkerProcessed < limit {
 		res, err := p.ProcessOne(ctx)
@@ -436,6 +440,27 @@ func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 	}
 	d.log.Info("sync cycle complete", "root", stats.Root, "local_files", stats.LocalFiles, "local_missing", stats.LocalMissing, "remote_entries", stats.RemoteEntries, "remote_applied_files", stats.RemoteAppliedFiles, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
 	return stats, nil
+}
+
+func (d *Daemon) workerHandler(ctx context.Context) (worker.Handler, error) {
+	if d.cfg.DryRun {
+		return worker.DryRunHandler{Store: d.store}, nil
+	}
+	if !d.cfg.AllowLive {
+		return nil, fmt.Errorf("live worker requires allow_live=true")
+	}
+	if d.cfg.TokenFile == "" {
+		return nil, fmt.Errorf("live worker requires token_file")
+	}
+	accessToken, err := d.loadDropboxAccessToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	client := dropbox.New(accessToken)
+	return worker.LiveHandler{
+		Transfer: worker.TransferHandler{Store: d.store, Client: client, Root: d.cfg.Root, AllowLive: true},
+		Deletes:  worker.ReviewedDeleteHandler{Store: d.store, Client: client, AllowLive: true, AllowReviewedDeletes: false},
+	}, nil
 }
 
 func (d *Daemon) workerLimit() int {

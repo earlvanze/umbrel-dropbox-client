@@ -17,6 +17,7 @@ type Config struct {
 	DownloadWorkers     int    `json:"download_workers"`
 	ScanIntervalSeconds int    `json:"scan_interval_seconds"`
 	DryRun              bool   `json:"dry_run"`
+	AllowLive           bool   `json:"allow_live"`
 	HealthAddr          string `json:"health_addr"`
 }
 

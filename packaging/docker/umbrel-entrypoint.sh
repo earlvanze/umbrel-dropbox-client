@@ -12,10 +12,22 @@ WATCH_DEBOUNCE_MS="${UDC_WATCH_DEBOUNCE_MS:-1500}"
 SCAN_INTERVAL_SECONDS="${UDC_SCAN_INTERVAL_SECONDS:-300}"
 DRY_RUN="${UDC_DRY_RUN:-true}"
 HEALTH_ADDR="${UDC_HEALTH_ADDR:-0.0.0.0:8477}"
+ALLOW_LIVE="${UDC_ALLOW_LIVE:-false}"
+LIVE_SCOPE="${UDC_LIVE_SCOPE:-/Obsidian}"
 
 if [ "$DRY_RUN" != "true" ]; then
-  echo "refusing to start Umbrel app with UDC_DRY_RUN=$DRY_RUN; app MVP is dry-run only" >&2
-  exit 1
+  if [ "$DRY_RUN" != "false" ] || [ "$ALLOW_LIVE" != "true" ]; then
+    echo "refusing to start Umbrel app with UDC_DRY_RUN=$DRY_RUN; live mode requires UDC_ALLOW_LIVE=true" >&2
+    exit 1
+  fi
+  if [ "$REMOTE_PATH" != "$LIVE_SCOPE" ] || [ "$ROOT" != "/dropbox${LIVE_SCOPE}" ]; then
+    echo "refusing live mode outside approved scope: root=$ROOT remote_path=$REMOTE_PATH live_scope=$LIVE_SCOPE" >&2
+    exit 1
+  fi
+  if [ ! -s "$TOKEN_FILE" ]; then
+    echo "refusing live mode without token file at $TOKEN_FILE" >&2
+    exit 1
+  fi
 fi
 
 if [ "$REMOTE_DELTA" = "auto" ]; then
@@ -42,10 +54,11 @@ cat > "$CONFIG" <<JSON
   "upload_workers": 4,
   "download_workers": 4,
   "scan_interval_seconds": $SCAN_INTERVAL_SECONDS,
-  "dry_run": true,
+  "dry_run": $DRY_RUN,
+  "allow_live": $ALLOW_LIVE,
   "health_addr": "$HEALTH_ADDR"
 }
 JSON
 
-echo "starting umbrel-dropbox-clientd root=$ROOT remote_path=$REMOTE_PATH remote_delta=$REMOTE_DELTA dry_run=true health=$HEALTH_ADDR"
+echo "starting umbrel-dropbox-clientd root=$ROOT remote_path=$REMOTE_PATH remote_delta=$REMOTE_DELTA dry_run=$DRY_RUN allow_live=$ALLOW_LIVE health=$HEALTH_ADDR"
 exec umbrel-dropbox-clientd --config "$CONFIG"

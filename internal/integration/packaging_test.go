@@ -64,10 +64,11 @@ func TestUmbrelAppPackagingStartsDryRunDaemon(t *testing.T) {
 	for _, want := range []string{
 		"UDC_ROOT:-/dropbox/Obsidian",
 		"UDC_REMOTE_PATH:-/Obsidian",
-		"refusing to start Umbrel app with UDC_DRY_RUN",
+		"live mode requires UDC_ALLOW_LIVE=true",
 		"umbrel-dropbox-client init --root \"$ROOT\" --db \"$DB\"",
 		"exec umbrel-dropbox-clientd --config \"$CONFIG\"",
-		"\"dry_run\": true",
+		"\"dry_run\": $DRY_RUN",
+		"\"allow_live\": $ALLOW_LIVE",
 		"\"health_addr\": \"$HEALTH_ADDR\"",
 	} {
 		if !strings.Contains(entrypoint, want) {

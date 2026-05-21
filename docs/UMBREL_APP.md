@@ -9,7 +9,7 @@ The app scaffold lives in `umbrel-app/` and is now wired to start the daemon, no
 - Serves the dashboard and JSON status on port `8477`.
 - Stores app state in `/data/state.db` and generated daemon config in `/data/config.json`.
 - Uses `/data/token.json` when present. If the token is missing, it starts a local-only dry-run dashboard with remote delta disabled.
-- Refuses to start if `UDC_DRY_RUN` is not `true`, so live transfers remain CLI-gated outside the app MVP.
+- Defaults to `UDC_DRY_RUN=true`. Scoped live mode requires both `UDC_DRY_RUN=false` and `UDC_ALLOW_LIVE=true`, and the entrypoint refuses live mode outside `/Obsidian`.
 
 ## Files
 
@@ -52,7 +52,7 @@ The compose defaults are conservative and can be overridden:
 - `UDC_REMOTE_PATH=/Obsidian`
 - `UDC_TOKEN_FILE=/data/token.json`
 - `UDC_REMOTE_DELTA=auto` (`true`, `false`, or `auto`)
-- `UDC_DRY_RUN=true` (must stay true for the app MVP)
+- `UDC_DRY_RUN=true` by default. For the guarded `/Obsidian` pilot only, set `UDC_DRY_RUN=false`, `UDC_ALLOW_LIVE=true`, and leave `UDC_LIVE_SCOPE=/Obsidian`.
 - `UDC_SCAN_INTERVAL_SECONDS=300`
 - `UDC_HEALTH_ADDR=0.0.0.0:8477`
 

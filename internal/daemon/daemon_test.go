@@ -68,12 +68,21 @@ func TestRunCycleMarksPreviouslySeenLocalFilesMissing(t *testing.T) {
 	}
 }
 
-func TestRunCycleRejectsLiveDaemonMode(t *testing.T) {
+func TestRunCycleRejectsLiveDaemonModeWithoutAllowLive(t *testing.T) {
 	s := testStore(t)
 	d := New(config.Config{Root: t.TempDir(), DryRun: false}, s, nil)
 	_, err := d.RunCycle(context.Background())
 	if err == nil {
 		t.Fatal("expected live mode error")
+	}
+}
+
+func TestRunCycleLiveModeRequiresTokenFile(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), DryRun: false, AllowLive: true}, s, nil)
+	_, err := d.RunCycle(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "token_file") {
+		t.Fatalf("expected token_file error, got %v", err)
 	}
 }
 
