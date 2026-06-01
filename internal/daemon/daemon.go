@@ -69,10 +69,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	defer shutdownHealth()
 	watchEvents, stopWatch := d.startWatcher(ctx)
 	defer stopWatch()
-	// Collect watch events into dirty set
-	if watchEvents != nil && d.dirty != nil {
-		go d.collectDirtyPaths(ctx, watchEvents)
-	}
+	// Watch events are collected into dirty set in the main select loop
 	// Initial full scan
 	if _, err := d.RunCycle(ctx); err != nil {
 		return err
@@ -145,21 +142,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
-func (d *Daemon) collectDirtyPaths(ctx context.Context, events <-chan watch.Event) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case ev, ok := <-events:
-			if !ok {
-				return
-			}
-			if d.dirty != nil {
-				d.dirty.Add(ev.Path)
-			}
-		}
-	}
-}
 
 func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 	return d.RunCycleIncremental(ctx, false)

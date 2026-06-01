@@ -33,10 +33,13 @@ func DefaultOptions() Options {
 	return Options{IgnoreDirs: map[string]bool{".git": true, ".umbrel-dropbox-client": true}}
 }
 
-func DefaultIgnoreDirs() map[string]bool {
+// CommonIgnoreDirs returns a broader set of directory names that are commonly
+// safe to skip in development and sync contexts. These are NOT used by default
+// because some names (like "build", "dist") may be legitimate user folders in
+// a general-purpose Dropbox sync. Use these via config.IgnoreDirs or by
+// merging them into Options.IgnoreDirs for projects where they are safe to skip.
+func CommonIgnoreDirs() map[string]bool {
 	return map[string]bool{
-		".git":                    true,
-		".umbrel-dropbox-client": true,
 		"node_modules":            true,
 		".cache":                  true,
 		".dropbox":                true,
@@ -49,13 +52,9 @@ func DefaultIgnoreDirs() map[string]bool {
 		".pytest_cache":           true,
 		".next":                   true,
 		".nuxt":                   true,
-		"dist":                    true,
-		"build":                   true,
 		".gradle":                 true,
 		".idea":                   true,
 		".vscode":                 true,
-		".DS_Store":               true,
-		"Thumbs.db":               true,
 	}
 }
 
@@ -63,7 +62,7 @@ func DefaultIgnoreDirs() map[string]bool {
 // hash reuse from KnownFiles.
 func Walk(root string, opts Options) ([]File, error) {
 	if opts.IgnoreDirs == nil {
-		opts.IgnoreDirs = DefaultIgnoreDirs()
+		opts.IgnoreDirs = DefaultOptions().IgnoreDirs
 	}
 	var out []File
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -119,78 +118,16 @@ func Walk(root string, opts Options) ([]File, error) {
 	return out, err
 }
 
-// WalkDirs scans only the listed subdirectories (relative to root) plus the
-// root itself for immediate files. It skips ignore dirs and reuses hashes from
-// KnownFiles. This is the incremental counterpart to Walk for use after
+// WalkDirs scans only the listed absolute directory paths plus the root itself
+// for immediate (non-directory) files. It skips ignore dirs and reuses hashes
+// from KnownFiles. This is the incremental counterpart to Walk for use after
 // watch events.
-func WalkDirs(root string, dirs []string, opts Options) ([]File, error) {
+func WalkDirs(root string, absDirs []string, opts Options) ([]File, error) {
 	if opts.IgnoreDirs == nil {
-		opts.IgnoreDirs = DefaultIgnoreDirs()
+		opts.IgnoreDirs = DefaultOptions().IgnoreDirs
 	}
 	var out []File
 	seen := make(map[string]bool)
-
-	walkOne := func(start string) error {
-		absStart := start
-		if !filepath.IsAbs(start) {
-			absStart = filepath.Join(root, start)
-		}
-		return filepath.WalkDir(absStart, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				if os.IsNotExist(err) {
-					return nil
-				}
-				return err
-			}
-			if d.Type()&fs.ModeSymlink != 0 {
-				if d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if d.IsDir() {
-				if path != absStart && opts.IgnoreDirs[d.Name()] {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			name := d.Name()
-			if strings.HasPrefix(name, ".download-") && strings.HasSuffix(name, ".tmp") {
-				return nil
-			}
-			rel, err := filepath.Rel(root, path)
-			if err != nil {
-				return err
-			}
-			rel = filepath.ToSlash(rel)
-			dp := DropboxPath(rel)
-			if dp == "" || seen[dp] {
-				return nil
-			}
-			seen[dp] = true
-			info, err := d.Info()
-			if err != nil {
-				if os.IsNotExist(err) {
-					return nil
-				}
-				return err
-			}
-			h := ""
-			if known, ok := opts.KnownFiles[dp]; ok && known.ContentHash != "" && known.Size == info.Size() && known.ModTime.Unix() == info.ModTime().Unix() {
-				h = known.ContentHash
-			} else {
-				h, err = hash.DropboxContentHash(path)
-				if err != nil {
-					if os.IsNotExist(err) {
-						return nil
-					}
-					return err
-				}
-			}
-			out = append(out, File{Path: rel, AbsPath: path, Size: info.Size(), ModTime: info.ModTime(), ContentHash: h})
-			return nil
-		})
-	}
 
 	// Always scan immediate files at root level
 	rootFiles, err := os.ReadDir(root)
@@ -234,7 +171,65 @@ func WalkDirs(root string, dirs []string, opts Options) ([]File, error) {
 		out = append(out, File{Path: rel, AbsPath: absPath, Size: info.Size(), ModTime: info.ModTime(), ContentHash: h})
 	}
 
-	for _, dir := range dirs {
+	walkOne := func(start string) error {
+		return filepath.WalkDir(start, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return err
+			}
+			if d.Type()&fs.ModeSymlink != 0 {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if d.IsDir() {
+				if path != start && opts.IgnoreDirs[d.Name()] {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			name := d.Name()
+			if strings.HasPrefix(name, ".download-") && strings.HasSuffix(name, ".tmp") {
+				return nil
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			rel = filepath.ToSlash(rel)
+			dp := DropboxPath(rel)
+			if dp == "" || seen[dp] {
+				return nil
+			}
+			seen[dp] = true
+			info, err := d.Info()
+			if err != nil {
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return err
+			}
+			h := ""
+			if known, ok := opts.KnownFiles[dp]; ok && known.ContentHash != "" && known.Size == info.Size() && known.ModTime.Unix() == info.ModTime().Unix() {
+				h = known.ContentHash
+			} else {
+				h, err = hash.DropboxContentHash(path)
+				if err != nil {
+					if os.IsNotExist(err) {
+						return nil
+					}
+					return err
+				}
+			}
+			out = append(out, File{Path: rel, AbsPath: path, Size: info.Size(), ModTime: info.ModTime(), ContentHash: h})
+			return nil
+		})
+	}
+
+	for _, dir := range absDirs {
 		if err := walkOne(dir); err != nil {
 			return nil, err
 		}
