@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	slashpath "path"
 	"path/filepath"
@@ -31,6 +29,7 @@ type Daemon struct {
 	remoteClient state.RemoteDeltaClient
 	dirty        *watch.DirtySet
 	lastFullScan time.Time
+	scanTrigger  chan struct{}
 }
 
 type CycleStats struct {
@@ -52,7 +51,7 @@ func New(cfg config.Config, store *state.Store, logger *slog.Logger) *Daemon {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	d := &Daemon{cfg: cfg, store: store, log: logger}
+	d := &Daemon{cfg: cfg, store: store, log: logger, scanTrigger: make(chan struct{}, 1)}
 	if cfg.Watch {
 		abs, err := filepath.Abs(cfg.Root)
 		if err == nil {
@@ -93,6 +92,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 			}
 			_ = d.store.Event("daemon.stop", ctx.Err().Error())
 			return ctx.Err()
+		case <-d.scanTrigger:
+			if _, err := d.RunCycleIncremental(ctx, false); err != nil {
+				_ = d.store.Event("daemon.error", err.Error())
+				d.log.Error("manual scan failed", "error", err)
+			}
 		case <-ticker.C:
 			// Periodic scan: full if interval elapsed, otherwise incremental
 			incremental := false
@@ -337,6 +341,7 @@ func (d *Daemon) serveStatusJSON(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	tokStatus, _ := auth.TokenStatus(d.cfg.TokenFile)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":          true,
@@ -346,6 +351,8 @@ func (d *Daemon) serveStatusJSON(w http.ResponseWriter, _ *http.Request) {
 		"pending_ops": st.PendingOps,
 		"conflicts":   st.Conflicts,
 		"last_event":  st.LastEvent,
+		"has_token":   tokStatus.Present,
+		"has_root":    st.Root != "",
 	})
 }
 
@@ -357,38 +364,6 @@ func (d *Daemon) serveConflictsJSON(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"conflicts": items})
-}
-
-func (d *Daemon) serveDashboard(w http.ResponseWriter, r *http.Request) {
-	// Redirect to setup if not configured
-	tokStatus, _ := auth.TokenStatus(d.cfg.TokenFile)
-	if d.cfg.Root == "" || !tokStatus.Present {
-		http.Redirect(w, r, "/setup", http.StatusTemporaryRedirect)
-		return
-	}
-	st, err := d.store.Status()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	conflicts, err := d.store.ListConflicts(10)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Umbrel Dropbox Client</title><style>body{font-family:system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;line-height:1.4}code{background:#f4f4f5;padding:.1rem .3rem;border-radius:.25rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}.card{border:1px solid #ddd;border-radius:.75rem;padding:1rem}.muted{color:#666}li{margin:.35rem 0}</style></head><body><h1>Umbrel Dropbox Client</h1><p class="muted">Dry-run-first sync dashboard. Live file transfer remains CLI-gated.</p><div class="grid"><div class="card"><strong>Paused</strong><br>%v</div><div class="card"><strong>Entries</strong><br>%d</div><div class="card"><strong>Pending ops</strong><br>%d</div><div class="card"><strong>Conflicts</strong><br>%d</div></div><p><strong>Root:</strong> <code>%s</code></p><p><strong>Last event:</strong> <code>%s</code></p><h2>Recent conflicts</h2>`, st.Paused, st.Entries, st.PendingOps, st.Conflicts, html.EscapeString(st.Root), html.EscapeString(st.LastEvent))
-	if len(conflicts) == 0 {
-		fmt.Fprint(w, `<p class="muted">No conflicts recorded.</p>`)
-	} else {
-		fmt.Fprint(w, "<ul>")
-		for _, c := range conflicts {
-			fmt.Fprintf(w, `<li><code>#%d</code> %s <span class="muted">%s</span></li>`, c.ID, html.EscapeString(c.Path), html.EscapeString(c.Reason))
-		}
-		fmt.Fprint(w, "</ul>")
-	}
-	fmt.Fprint(w, `<h2>Auth</h2><p>Authenticate from CLI: <code>umbrel-dropbox-client auth pkce --client-id APP_KEY</code></p><p><a href="/files">local file manager</a> · <a href="/status">status JSON</a> · <a href="/conflicts">conflicts JSON</a></p></body></html>`)
 }
 
 type localFileItem struct {
@@ -413,47 +388,6 @@ func (d *Daemon) serveFilesJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(listing)
-}
-
-func (d *Daemon) serveFilesHTML(w http.ResponseWriter, r *http.Request) {
-	listing, err := d.localFileListing(r.URL.Query().Get("path"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local files - Umbrel Dropbox Client</title><style>body{font-family:system-ui,sans-serif;max-width:1040px;margin:2rem auto;padding:0 1rem;line-height:1.4;color:#18181b}a{color:#0061ff;text-decoration:none}a:hover{text-decoration:underline}.muted{color:#71717a}.top{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}.crumbs{margin:1rem 0;padding:.75rem 1rem;background:#f4f4f5;border-radius:.75rem}table{width:100%%;border-collapse:collapse;background:white;border:1px solid #e4e4e7;border-radius:.75rem;overflow:hidden}th,td{padding:.75rem;border-bottom:1px solid #eee;text-align:left}th{font-size:.85rem;color:#52525b;background:#fafafa}tr:last-child td{border-bottom:0}.name{font-weight:600}.size,.modified{white-space:nowrap}.pill{display:inline-block;font-size:.75rem;border:1px solid #d4d4d8;border-radius:999px;padding:.1rem .45rem;color:#52525b}</style></head><body><div class="top"><div><h1>Local files</h1><p class="muted">Read-only browser for the configured sync root.</p></div><p><a href="/">Dashboard</a> · <a href="/api/files?path=%s">JSON</a></p></div>`, html.EscapeString(url.QueryEscape(listing.Path)))
-	fmt.Fprintf(w, `<p><strong>Root:</strong> <code>%s</code></p><div class="crumbs">`, html.EscapeString(listing.Root))
-	fmt.Fprint(w, `<a href="/files">root</a>`)
-	if listing.Path != "" {
-		parts := strings.Split(listing.Path, "/")
-		for i, part := range parts {
-			crumb := strings.Join(parts[:i+1], "/")
-			fmt.Fprintf(w, ` / <a href="/files?path=%s">%s</a>`, html.EscapeString(url.QueryEscape(crumb)), html.EscapeString(part))
-		}
-	}
-	fmt.Fprint(w, `</div><table><thead><tr><th>Name</th><th>Kind</th><th>Size</th><th>Modified</th><th></th></tr></thead><tbody>`)
-	if listing.Path != "" {
-		parent := slashpath.Dir("/" + listing.Path)
-		if parent == "/" {
-			parent = ""
-		} else {
-			parent = strings.TrimPrefix(parent, "/")
-		}
-		fmt.Fprintf(w, `<tr><td class="name"><a href="/files?path=%s">..</a></td><td><span class="pill">folder</span></td><td></td><td></td><td></td></tr>`, html.EscapeString(url.QueryEscape(parent)))
-	}
-	for _, item := range listing.Items {
-		kind := "file"
-		link := "/download?path=" + url.QueryEscape(item.Path)
-		action := "download"
-		if item.Dir {
-			kind = "folder"
-			link = "/files?path=" + url.QueryEscape(item.Path)
-			action = "open"
-		}
-		fmt.Fprintf(w, `<tr><td class="name"><a href="%s">%s</a></td><td><span class="pill">%s</span></td><td class="size">%s</td><td class="modified">%s</td><td><a href="%s">%s</a></td></tr>`, html.EscapeString(link), html.EscapeString(item.Name), kind, html.EscapeString(formatBytes(item.Size, item.Dir)), html.EscapeString(item.ModTime), html.EscapeString(link), action)
-	}
-	fmt.Fprint(w, `</tbody></table></body></html>`)
 }
 
 func (d *Daemon) serveDownload(w http.ResponseWriter, r *http.Request) {
@@ -537,21 +471,6 @@ func (d *Daemon) resolveLocalPath(rel string) (string, string, error) {
 	return fullAbs, clean, nil
 }
 
-func formatBytes(size int64, isDir bool) string {
-	if isDir {
-		return ""
-	}
-	const unit = 1024
-	if size < unit {
-		return fmt.Sprintf("%d B", size)
-	}
-	div, exp := int64(unit), 0
-	for n := size / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(size)/float64(div), "KMGTPE"[exp])
-}
 
 func (d *Daemon) startHealth(ctx context.Context) func() {
 	if d.cfg.HealthAddr == "" {
