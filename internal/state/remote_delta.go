@@ -31,6 +31,10 @@ type RemoteDeltaStats struct {
 }
 
 func (s *Store) IngestRemoteDelta(ctx context.Context, client RemoteDeltaClient, remotePath string) (RemoteDeltaStats, error) {
+	return s.IngestRemoteDeltaFilter(ctx, client, remotePath, nil)
+}
+
+func (s *Store) IngestRemoteDeltaFilter(ctx context.Context, client RemoteDeltaClient, remotePath string, filter func(string) bool) (RemoteDeltaStats, error) {
 	cursorKey := DropboxCursorKeyForPath(remotePath)
 	cursor, err := s.GetConfig(cursorKey)
 	if err != nil {
@@ -40,7 +44,7 @@ func (s *Store) IngestRemoteDelta(ctx context.Context, client RemoteDeltaClient,
 	if err != nil {
 		return RemoteDeltaStats{}, err
 	}
-	applied, err := s.ApplyRemoteMetadataWithBase(delta.Entries, remotePath)
+	applied, err := s.ApplyRemoteMetadataWithBaseFilter(delta.Entries, remotePath, filter)
 	if err != nil {
 		return RemoteDeltaStats{}, err
 	}

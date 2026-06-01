@@ -8,10 +8,17 @@ import (
 )
 
 func (s *Store) ApplyRemoteMetadata(entries []dropbox.Metadata) (int, error) {
-	return s.ApplyRemoteMetadataWithBase(entries, "")
+	return s.ApplyRemoteMetadataWithBaseFilter(entries, "", nil)
 }
 
 func (s *Store) ApplyRemoteMetadataWithBase(entries []dropbox.Metadata, remoteBase string) (int, error) {
+	return s.ApplyRemoteMetadataWithBaseFilter(entries, remoteBase, nil)
+}
+
+func (s *Store) ApplyRemoteMetadataWithBaseFilter(entries []dropbox.Metadata, remoteBase string, filter func(string) bool) (int, error) {
+	if filter == nil {
+		filter = func(string) bool { return true }
+	}
 	applied := 0
 	for _, e := range entries {
 		if e.Tag != "file" {
@@ -23,6 +30,9 @@ func (s *Store) ApplyRemoteMetadataWithBase(entries []dropbox.Metadata, remoteBa
 		}
 		path = stripRemoteBase(path, remoteBase)
 		if path == "" {
+			continue
+		}
+		if !filter(path) {
 			continue
 		}
 		mtime := e.ServerMtime

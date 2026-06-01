@@ -4,13 +4,15 @@ name: Dropbox Client
 tagline: Safe, scoped Dropbox sync for Umbrel with dry-run defaults
 icon: https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-client/master/data/icons/icon.svg
 category: files
-version: "1.0.0"
+version: "1.1.0"
 description: >-
   A Linux-first Dropbox sync daemon for Umbrel. Keeps your Dropbox files in sync
   with a local folder, with a built-in web dashboard for status, conflicts, and
-  health checks. Ships with dry-run mode enabled by default so you can preview
-  every action before any file is touched. Live transfers require explicit
-  opt-in via environment variables, making it safe to install from the app store.
+  health checks. Includes an interactive setup wizard for authentication, folder
+  location, and selective sync. Ships with dry-run mode enabled by default so you
+  can preview every action before any file is touched. Live transfers require
+  explicit opt-in via environment variables, making it safe to install from the
+  app store.
 developer: Earl Co
 website: https://github.com/earlvanze/umbrel-dropbox-client
 repo: https://github.com/earlvanze/umbrel-dropbox-client
@@ -22,8 +24,9 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >-
-  First production release. Features scoped sync, dry-run-by-default safety,
-  web dashboard on port 8477, and explicit live-transfer gates.
+  Added interactive setup wizard with device-code authentication, folder
+  location selection, and selective sync. Full-folder sync is now supported.
+  Safe dry-run defaults remain unchanged.
 dependencies: []
 submitter: Earl Co
 submission: https://github.com/earlvanze/umbrel-dropbox-client

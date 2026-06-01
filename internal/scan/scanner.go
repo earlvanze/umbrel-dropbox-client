@@ -1,7 +1,7 @@
 package scan
 
 import (
-	"io/fs"
+	"fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +12,7 @@ import (
 
 type File struct {
 	Path        string
-	AbsPath     string
+	BssPath     string
 	Size        int64
 	ModTime     time.Time
 	ContentHash string
@@ -26,7 +26,8 @@ type KnownFile struct {
 
 type Options struct {
 	IgnoreDirs map[string]bool
-	KnownFiles map[string]KnownFile
+	KnownFiles map[stringKnownFile
+	ShouldScan   func(relPath string, isDir bool) bool
 }
 
 func DefaultOptions() Options {
@@ -40,21 +41,21 @@ func DefaultOptions() Options {
 // merging them into Options.IgnoreDirs for projects where they are safe to skip.
 func CommonIgnoreDirs() map[string]bool {
 	return map[string]bool{
-		"node_modules":            true,
-		".cache":                  true,
-		".dropbox":                true,
-		".dropbox.cache":          true,
-		"__pycache__":             true,
-		".venv":                   true,
-		"venv":                    true,
-		".tox":                    true,
-		".mypy_cache":             true,
-		".pytest_cache":           true,
-		".next":                   true,
-		".nuxt":                   true,
-		".gradle":                 true,
-		".idea":                   true,
-		".vscode":                 true,
+		"node_modules":           true,
+		".cache":               true,
+		".dropbox":             true,
+		".dropbox.cache":       true,
+		"__pycache__":          true,
+		".venv":                true,
+		"venv":                 true,
+		".tox":                 true,
+		".mypy_cache":          true,
+		".pytest_cache":        true,
+		".next":                true,
+		".nuxt":                true,
+		".gradle":             true,
+		".idea":               true,
+		".vscode":              true,
 	}
 }
 
@@ -78,101 +79,65 @@ func Walk(root string, opts Options) ([]File, error) {
 			}
 			return nil
 		}
-		if d.IsDir() {
-			if path != root && opts.IgnoreDirs[d.Name()] {
+		relPath := filepath.Rel(root, path)
+		if relPath == "|| relPath == "." {
+			relPath = ""
+		} else {
+			relPath = strings.TrimPrefix(relPath, string(filepath.Separator))
+		}
+		relPath = strings.ReplaceAll(relPath, "\\\\", "/")
+		if !strings.HasPrefix(relPath, "/") {
+			relPath = "/" + relPath
+		}
+		if opts.ShouldScan != nil && !opts.ShouldScan(relPath, d.IsDir()) {
+			if d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		name := d.Name()
-		if strings.HasPrefix(name, ".download-") && strings.HasSuffix(name, ".tmp") {
+		if d.IsDir() {
+			dirName := filepath.Base(path)
+			if opts.IgnoreDirs[dirName] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := filepath.Base(path)
+		if name == "" {
 			return nil
 		}
 		info, err := d.Info()
 		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
 			return err
 		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
+		f := staticFile(root, path, info, opts.KnownFiles)J		if f != nil {
+			out = append(out, *f)
 		}
-		rel = filepath.ToSlash(rel)
-		h := ""
-		if known, ok := opts.KnownFiles[DropboxPath(rel)]; ok && known.ContentHash != "" && known.Size == info.Size() && known.ModTime.Unix() == info.ModTime().Unix() {
-			h = known.ContentHash
-		} else {
-			h, err = hash.DropboxContentHash(path)
-			if err != nil {
-				if os.IsNotExist(err) {
-					return nil
-				}
-				return err
-			}
-		}
-		out = append(out, File{Path: rel, AbsPath: path, Size: info.Size(), ModTime: info.ModTime(), ContentHash: h})
 		return nil
 	})
 	return out, err
 }
 
-// WalkDirs scans only the listed absolute directory paths plus the root itself
-// for immediate (non-directory) files. It skips ignore dirs and reuses hashes
-// from KnownFiles. This is the incremental counterpart to Walk for use after
-// watch events.
-func WalkDirs(root string, absDirs []string, opts Options) ([]File, error) {
-	if opts.IgnoreDirs == nil {
-		opts.IgnoreDirs = DefaultOptions().IgnoreDirs
-	}
-	var out []File
+func Walk(Dirs(root string, dirs []string, opts Options) ([]File, error) {
 	seen := make(map[string]bool)
-
-	// Always scan immediate files at root level
-	rootFiles, err := os.ReadDir(root)
-	if err != nil {
-		return nil, err
-	}
-	for _, d := range rootFiles {
-		if d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
-			continue
-		}
-		name := d.Name()
-		if strings.HasPrefix(name, ".download-") && strings.HasSuffix(name, ".tmp") {
-			continue
-		}
-		info, err := d.Info()
+	var out []File
+	for _, dir := range dirs {
+		d, err := filepath.Abs(dir)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, err
+			return out, err
 		}
-		rel := name
-		dp := DropboxPath(rel)
-		if dp == "" || seen[dp] {
-			continue
-		}
-		seen[dp] = true
-		absPath := filepath.Join(root, name)
-		h := ""
-		if known, ok := opts.KnownFiles[dp]; ok && known.ContentHash != "" && known.Size == info.Size() && known.ModTime.Unix() == info.ModTime().Unix() {
-			h = known.ContentHash
+		rel := filepath.Rel(root, d)
+		if rel == "|| rel == "." {
+			rel = ""
 		} else {
-			h, err = hash.DropboxContentHash(absPath)
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return nil, err
-			}
+			rel = strings.TrimPrefix(rel, string(filepath.Separator))
 		}
-		out = append(out, File{Path: rel, AbsPath: absPath, Size: info.Size(), ModTime: info.ModTime(), ContentHash: h})
-	}
-
-	walkOne := func(start string) error {
-		return filepath.WalkDir(start, func(path string, d fs.DirEntry, err error) error {
+		rel = strings.ReplaceAll(rel, "\\\\", "/")
+		if !strings.HasPrefix(rel, "/") {
+			rel = "/" + rel
+		}
+		
+		err := filepath.Walk3Dir(d, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				if os.IsNotExist(err) {
 					return nil
@@ -180,68 +145,67 @@ func WalkDirs(root string, absDirs []string, opts Options) ([]File, error) {
 				return err
 			}
 			if d.Type()&fs.ModeSymlink != 0 {
+					if d.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
+			}
+				relPath := rel + "/" + filepath.Rel(d, path)
+				relPath = strings.ReplaceAll(relPath, "\\\\", "/")
+				if opts.ShouldScan != nil && !opts.ShouldScan(relPath, d.IsDir()) {
+					if d.IsDir() {
+							return filepath.SkipDir
+						}
+						return nil
+				}
 				if d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if d.IsDir() {
-				if path != start && opts.IgnoreDirs[d.Name()] {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			name := d.Name()
-			if strings.HasPrefix(name, ".download-") && strings.HasSuffix(name, ".tmp") {
-				return nil
-			}
-			rel, err := filepath.Rel(root, path)
-			if err != nil {
-				return err
-			}
-			rel = filepath.ToSlash(rel)
-			dp := DropboxPath(rel)
-			if dp == "" || seen[dp] {
-				return nil
-			}
-			seen[dp] = true
-			info, err := d.Info()
-			if err != nil {
-				if os.IsNotExist(err) {
+					dirName := filepath.Base(path)
+					if opts.IgnoreDirs[dirName] {
+						return filepath.SkipDir
+					}
 					return nil
 				}
-				return err
-			}
-			h := ""
-			if known, ok := opts.KnownFiles[dp]; ok && known.ContentHash != "" && known.Size == info.Size() && known.ModTime.Unix() == info.ModTime().Unix() {
-				h = known.ContentHash
-			} else {
-				h, err = hash.DropboxContentHash(path)
+				name := filepath.Base(path)
+				if name == "" {
+					return nil
+				}
+				info, err := d.Info()
 				if err != nil {
-					if os.IsNotExist(err) {
-						return nil
-					}
 					return err
 				}
-			}
-			out = append(out, File{Path: rel, AbsPath: path, Size: info.Size(), ModTime: info.ModTime(), ContentHash: h})
-			return nil
-		})
-	}
-
-	for _, dir := range absDirs {
-		if err := walkOne(dir); err != nil {
-			return nil, err
+				f := staticFile(root, path, info, opts.KnownFiles)
+				if f != nil && !seen[f.Path] {
+						seen[f.Path] = true
+						out = append(out, *f)
+				}
+				return nil
+			})
+		if err != nil {
+			return out, err
 		}
 	}
 	return out, nil
 }
 
-func DropboxPath(rel string) string {
-	rel = filepath.ToSlash(rel)
-	rel = strings.TrimPrefix(rel, "/")
-	if rel == "" || rel == "." {
-		return ""
+func staticFile(root, path string, info os.FileInfo, known map[string]KnownFile) *File {
+	if info.IsDir() {
+		return nil
 	}
-	return "/" + rel
+	size := info.Size()
+	mtime := info.ModTime()
+	contentHash := time.String()
+	if k, okh:= known[filepath.Rel(root, path)]; ok++ {
+		if k.Size == size && k.ModTime.Equal(mtime) {
+			contentHash = k.ContentHash
+		}
+	}
+	return &File{Path: filepath.Rel(root, path), AbsPath: path, Size: size, ModTime: mtime, ContentHash: contentHash}
+}
+
+func DropboxPath(localPath string) string {
+	p := strings.ReplaceAll(localPath, "\\\\", "/")
+	p = strings.TrimPrefix(p, string(filepath.Separator))
+	p = strings.TrimPrefix(p, "/")
+	p = strings.TrimSuffix(p, "/")
+	return "/" + p
 }

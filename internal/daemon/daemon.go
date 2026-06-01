@@ -291,6 +291,10 @@ func (d *Daemon) buildScanOpts(known map[string]state.Entry) scan.Options {
 	for _, dir := range d.cfg.ExtraIgnoreDirs() {
 		opts.IgnoreDirs[dir] = true
 	}
+	// Apply selective sync scope
+	opts.ShouldScan = func(relPath string, isDir bool) bool {
+		return d.cfg.IsPathInSyncScope(relPath)
+	}
 	return opts
 }
 
@@ -299,10 +303,22 @@ func (d *Daemon) HealthHandler() http.Handler {
 		switch r.URL.Path {
 		case "/", "/ui":
 			d.serveDashboard(w, r)
+		case "/setup":
+			d.serveSetupHTML(w, r)
 		case "/files":
 			d.serveFilesHTML(w, r)
 		case "/api/files":
 			d.serveFilesJSON(w, r)
+		case "/api/config":
+			d.serveConfigAPI(w, r)
+		case "/api/setup":
+			d.serveSetupStatus(w, r)
+		case "/api/auth/device":
+			d.serveAuthDeviceStart(w, r)
+		case "/api/auth/device-poll":
+			d.serveAuthDevicePoll(w, r)
+		case "/api/remote/folders":
+			d.serveRemoteFolders(w, r)
 		case "/download":
 			d.serveDownload(w, r)
 		case "/healthz", "/status":
@@ -343,7 +359,13 @@ func (d *Daemon) serveConflictsJSON(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"conflicts": items})
 }
 
-func (d *Daemon) serveDashboard(w http.ResponseWriter, _ *http.Request) {
+func (d *Daemon) serveDashboard(w http.ResponseWriter, r *http.Request) {
+	// Redirect to setup if not configured
+	tokStatus, _ := auth.TokenStatus(d.cfg.TokenFile)
+	if d.cfg.Root == "" || !tokStatus.Present {
+		http.Redirect(w, r, "/setup", http.StatusTemporaryRedirect)
+		return
+	}
 	st, err := d.store.Status()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -599,7 +621,7 @@ func (d *Daemon) ingestRemoteDelta(ctx context.Context) (state.RemoteDeltaStats,
 		}
 		client = dropbox.New(accessToken)
 	}
-	return d.store.IngestRemoteDelta(ctx, client, d.cfg.RemotePath)
+	return d.store.IngestRemoteDeltaFilter(ctx, client, d.cfg.RemotePath, d.cfg.IsPathInSyncScope)
 }
 
 func (d *Daemon) loadDropboxAccessToken(ctx context.Context) (string, error) {
