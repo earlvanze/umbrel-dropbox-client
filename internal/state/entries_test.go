@@ -62,3 +62,77 @@ func TestUpsertEntryRejectsEmptyNormalizedPath(t *testing.T) {
 		}
 	}
 }
+
+
+func TestUpsertEntryIfChangedSkipsUnchanged(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	// Insert initial entry
+	changed, err := s.UpsertEntryIfChanged(Entry{Path: "/foo/bar.txt", ContentHash: "hash1", Size: 100, MTime: time.Unix(1700000000, 0), State: "local_scanned"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected first upsert to be a change")
+	}
+	// Same data: should skip
+	changed, err = s.UpsertEntryIfChanged(Entry{Path: "/foo/bar.txt", ContentHash: "hash1", Size: 100, MTime: time.Unix(1700000000, 0), State: "local_scanned"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("expected second upsert to be skipped (no change)")
+	}
+	// Different content hash: should update
+	changed, err = s.UpsertEntryIfChanged(Entry{Path: "/foo/bar.txt", ContentHash: "hash2", Size: 100, MTime: time.Unix(1700000000, 0), State: "local_scanned"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected third upsert to be a change")
+	}
+	// Verify final state
+	entry, err := s.EntryByPath("/foo/bar.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.ContentHash != "hash2" {
+		t.Fatalf("expected hash2, got %s", entry.ContentHash)
+	}
+}
+
+func TestUpsertBatchReturnsChangedCount(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	entries := []Entry{
+		{Path: "/a.txt", ContentHash: "h1", Size: 1, MTime: time.Unix(1700000000, 0), State: "local_scanned"},
+		{Path: "/b.txt", ContentHash: "h2", Size: 2, MTime: time.Unix(1700000000, 0), State: "local_scanned"},
+	}
+	changed, err := s.UpsertBatch(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed != 2 {
+		t.Fatalf("expected 2 changed, got %d", changed)
+	}
+	// Re-upsert same data: should be 0 changes
+	changed, err = s.UpsertBatch(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed != 0 {
+		t.Fatalf("expected 0 changed on re-upsert, got %d", changed)
+	}
+}

@@ -6,24 +6,92 @@ import (
 )
 
 type Config struct {
-	Root                string `json:"root"`
-	DBPath              string `json:"db_path"`
-	RemotePath          string `json:"remote_path"`
-	RemoteDelta         bool   `json:"remote_delta"`
-	TokenFile           string `json:"token_file"`
-	Watch               bool   `json:"watch"`
-	WatchDebounceMs     int    `json:"watch_debounce_ms"`
-	UploadWorkers       int    `json:"upload_workers"`
-	DownloadWorkers     int    `json:"download_workers"`
-	ScanIntervalSeconds int    `json:"scan_interval_seconds"`
-	DryRun              bool   `json:"dry_run"`
-	AllowLive           bool   `json:"allow_live"`
-	HealthAddr          string `json:"health_addr"`
+	Root                      string `json:"root"`
+	DBPath                    string `json:"db_path"`
+	RemotePath                string `json:"remote_path"`
+	RemoteDelta               bool   `json:"remote_delta"`
+	TokenFile                 string `json:"token_file"`
+	Watch                     bool   `json:"watch"`
+	WatchDebounceMs           int    `json:"watch_debounce_ms"`
+	UploadWorkers             int    `json:"upload_workers"`
+	DownloadWorkers           int    `json:"download_workers"`
+	ScanIntervalSeconds       int    `json:"scan_interval_seconds"`
+	FullScanIntervalSeconds   int    `json:"full_scan_interval_seconds"`
+	MaxIncrementalFiles       int    `json:"max_incremental_files"`
+	IgnoreDirs                string `json:"ignore_dirs"`
+	DryRun                    bool   `json:"dry_run"`
+	AllowLive                 bool   `json:"allow_live"`
+	HealthAddr                string `json:"health_addr"`
+	AllowLargeRoot            bool   `json:"allow_large_root"`
+	MaxFilesPerFullScan       int    `json:"max_files_per_full_scan"`
 }
 
 func Default(root string) Config {
-	return Config{Root: root, RemotePath: "", Watch: true, WatchDebounceMs: 1500, UploadWorkers: 4, DownloadWorkers: 4, ScanIntervalSeconds: 300, DryRun: true, HealthAddr: "127.0.0.1:0"}
+	return Config{
+		Root:                    root,
+		RemotePath:              "",
+		Watch:                   true,
+		WatchDebounceMs:         1500,
+		UploadWorkers:           4,
+		DownloadWorkers:         4,
+		ScanIntervalSeconds:     300,
+		FullScanIntervalSeconds: 3600,
+		MaxIncrementalFiles:     10000,
+		DryRun:                  true,
+		HealthAddr:              "127.0.0.1:0",
+	}
 }
+
+func (c Config) FullScanInterval() int {
+	if c.FullScanIntervalSeconds <= 0 {
+		return 3600
+	}
+	return c.FullScanIntervalSeconds
+}
+
+func (c Config) IncrementalScanMaxFiles() int {
+	if c.MaxIncrementalFiles <= 0 {
+		return 10000
+	}
+	return c.MaxIncrementalFiles
+}
+
+func (c Config) ExtraIgnoreDirs() []string {
+	if c.IgnoreDirs == "" {
+		return nil
+	}
+	var dirs []string
+	for _, d := range splitComma(c.IgnoreDirs) {
+		d = trimSpace(d)
+		if d != "" {
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs
+}
+
+func splitComma(s string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == ',' {
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	return parts
+}
+
+func trimSpace(s string) string {
+	for len(s) > 0 && s[0] == ' ' {
+		s = s[1:]
+	}
+	for len(s) > 0 && s[len(s)-1] == ' ' {
+		s = s[:len(s)-1]
+	}
+	return s
+}
+
 func Load(path string) (Config, error) {
 	var c Config
 	b, err := os.ReadFile(path)

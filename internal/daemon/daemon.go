@@ -29,11 +29,14 @@ type Daemon struct {
 	store        *state.Store
 	log          *slog.Logger
 	remoteClient state.RemoteDeltaClient
+	dirty        *watch.DirtySet
+	lastFullScan time.Time
 }
 
 type CycleStats struct {
 	Root               string
 	LocalFiles         int
+	LocalChanged       int
 	WorkerProcessed    int
 	WorkerCompleted    int
 	WorkerFailed       int
@@ -42,13 +45,21 @@ type CycleStats struct {
 	RemoteEntries      int
 	RemoteAppliedFiles int
 	LocalMissing       int
+	Incremental        bool
 }
 
 func New(cfg config.Config, store *state.Store, logger *slog.Logger) *Daemon {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Daemon{cfg: cfg, store: store, log: logger}
+	d := &Daemon{cfg: cfg, store: store, log: logger}
+	if cfg.Watch {
+		abs, err := filepath.Abs(cfg.Root)
+		if err == nil {
+			d.dirty = watch.NewDirtySet(abs)
+		}
+	}
+	return d
 }
 
 func (d *Daemon) Run(ctx context.Context) error {
@@ -58,13 +69,20 @@ func (d *Daemon) Run(ctx context.Context) error {
 	defer shutdownHealth()
 	watchEvents, stopWatch := d.startWatcher(ctx)
 	defer stopWatch()
+	// Collect watch events into dirty set
+	if watchEvents != nil && d.dirty != nil {
+		go d.collectDirtyPaths(ctx, watchEvents)
+	}
+	// Initial full scan
 	if _, err := d.RunCycle(ctx); err != nil {
 		return err
 	}
+	d.lastFullScan = time.Now()
 	interval := time.Duration(d.cfg.ScanIntervalSeconds) * time.Second
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
+	fullScanInterval := time.Duration(d.cfg.FullScanInterval()) * time.Second
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	debounce := d.watchDebounce()
@@ -79,7 +97,18 @@ func (d *Daemon) Run(ctx context.Context) error {
 			_ = d.store.Event("daemon.stop", ctx.Err().Error())
 			return ctx.Err()
 		case <-ticker.C:
-			if _, err := d.RunCycle(ctx); err != nil {
+			// Periodic scan: full if interval elapsed, otherwise incremental
+			incremental := false
+			if d.dirty != nil && d.dirty.Len() == 0 && time.Since(d.lastFullScan) < fullScanInterval {
+				// No dirty paths and full scan not due; skip periodic cycle
+				continue
+			}
+			if d.dirty != nil && d.dirty.Len() > 0 {
+				incremental = true
+			} else if time.Since(d.lastFullScan) >= fullScanInterval {
+				incremental = false
+			}
+			if _, err := d.RunCycleIncremental(ctx, incremental); err != nil {
 				_ = d.store.Event("daemon.error", err.Error())
 				d.log.Error("sync cycle failed", "error", err)
 			}
@@ -89,6 +118,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 				continue
 			}
 			_ = d.store.Event("daemon.watch", ev.Path)
+			if d.dirty != nil {
+				d.dirty.Add(ev.Path)
+			}
 			if debounceTimer == nil {
 				debounceTimer = time.NewTimer(debounce)
 				debounceC = debounceTimer.C
@@ -104,12 +136,180 @@ func (d *Daemon) Run(ctx context.Context) error {
 		case <-debounceC:
 			debounceC = nil
 			debounceTimer = nil
-			if _, err := d.RunCycle(ctx); err != nil {
+			// Watch-triggered cycles are always incremental
+			if _, err := d.RunCycleIncremental(ctx, true); err != nil {
 				_ = d.store.Event("daemon.error", err.Error())
 				d.log.Error("watch-triggered sync cycle failed", "error", err)
 			}
 		}
 	}
+}
+
+func (d *Daemon) collectDirtyPaths(ctx context.Context, events <-chan watch.Event) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, ok := <-events:
+			if !ok {
+				return
+			}
+			if d.dirty != nil {
+				d.dirty.Add(ev.Path)
+			}
+		}
+	}
+}
+
+func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
+	return d.RunCycleIncremental(ctx, false)
+}
+
+func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (CycleStats, error) {
+	if d.store == nil {
+		return CycleStats{}, fmt.Errorf("daemon missing store")
+	}
+	if d.cfg.Root == "" {
+		return CycleStats{}, fmt.Errorf("daemon missing root")
+	}
+	paused, err := d.store.IsPaused()
+	if err != nil {
+		return CycleStats{}, err
+	}
+	if paused {
+		if err := d.store.Event("daemon.paused", "cycle skipped"); err != nil {
+			return CycleStats{}, err
+		}
+		return CycleStats{Root: d.cfg.Root}, nil
+	}
+	if !d.cfg.DryRun && !d.cfg.AllowLive {
+		return CycleStats{}, fmt.Errorf("daemon live mode requires allow_live=true")
+	}
+	remoteStats, err := d.ingestRemoteDelta(ctx)
+	if err != nil {
+		return CycleStats{}, err
+	}
+
+	// Determine scan scope
+	dirtyDirs := []string{}
+	if incremental && d.dirty != nil {
+		dirtyDirs = d.dirty.Dirs()
+		if len(dirtyDirs) == 0 {
+			// Debounce fired but no actual dirty paths; skip
+			return CycleStats{Root: d.cfg.Root, Incremental: true}, nil
+		}
+		dirtyDirs = watch.SplitParentDirs(dirtyDirs)
+	}
+
+	known, err := d.store.LocalEntries()
+	if err != nil {
+		return CycleStats{}, err
+	}
+	scanOpts := d.buildScanOpts(known)
+
+	var files []scan.File
+	if incremental && len(dirtyDirs) > 0 {
+		// Incremental scan: only scan changed directories
+		absDirs := make([]string, 0, len(dirtyDirs))
+		root, err := filepath.Abs(d.cfg.Root)
+		if err != nil {
+			return CycleStats{}, err
+		}
+		for _, dir := range dirtyDirs {
+			if dir == "" {
+				absDirs = append(absDirs, root)
+			} else {
+				absDirs = append(absDirs, filepath.Join(root, dir))
+			}
+		}
+		files, err = scan.WalkDirs(d.cfg.Root, absDirs, scanOpts)
+		if err != nil {
+			return CycleStats{}, err
+		}
+	} else {
+		// Full scan
+		files, err = scan.Walk(d.cfg.Root, scanOpts)
+		if err != nil {
+			return CycleStats{}, err
+		}
+		d.lastFullScan = time.Now()
+	}
+
+	// Upsert scanned files, skipping unchanged rows
+	seen := make(map[string]bool, len(files))
+	changed := 0
+	for _, f := range files {
+		dp := scan.DropboxPath(f.Path)
+		seen[dp] = true
+		didChange, err := d.store.UpsertEntryIfChanged(state.Entry{Path: dp, ContentHash: f.ContentHash, Size: f.Size, MTime: f.ModTime, State: "local_scanned"})
+		if err != nil {
+			return CycleStats{}, err
+		}
+		if didChange {
+			changed++
+		}
+	}
+
+	// Mark missing files
+	var missing int
+	if incremental && len(dirtyDirs) > 0 {
+		// Only check missing in changed directories
+		missing, err = d.store.MarkMissingLocalInDirs(seen, dirtyDirs)
+		if err != nil {
+			return CycleStats{}, err
+		}
+	} else {
+		missing, err = d.store.MarkMissingLocal(seen)
+		if err != nil {
+			return CycleStats{}, err
+		}
+	}
+
+	limit := d.workerLimit()
+	handler, err := d.workerHandler(ctx)
+	if err != nil {
+		return CycleStats{}, err
+	}
+	p := worker.Processor{Store: d.store, Handler: handler}
+	stats := CycleStats{Root: d.cfg.Root, LocalFiles: len(files), LocalChanged: changed, WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles, LocalMissing: missing, Incremental: incremental}
+	for stats.WorkerProcessed < limit {
+		res, err := p.ProcessOne(ctx)
+		if err != nil {
+			return stats, err
+		}
+		if !res.Processed {
+			break
+		}
+		stats.WorkerProcessed++
+		if res.Completed {
+			stats.WorkerCompleted++
+		}
+		if res.Failed {
+			stats.WorkerFailed++
+		}
+	}
+	scanMode := "full"
+	if incremental {
+		scanMode = "incremental"
+	}
+	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s mode=%s local_files=%d local_changed=%d local_missing=%d remote_entries=%d remote_applied_files=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, scanMode, stats.LocalFiles, stats.LocalChanged, stats.LocalMissing, stats.RemoteEntries, stats.RemoteAppliedFiles, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
+		return stats, err
+	}
+	d.log.Info("sync cycle complete", "root", stats.Root, "mode", scanMode, "local_files", stats.LocalFiles, "local_changed", stats.LocalChanged, "local_missing", stats.LocalMissing, "remote_entries", stats.RemoteEntries, "remote_applied_files", stats.RemoteAppliedFiles, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
+	return stats, nil
+}
+
+func (d *Daemon) buildScanOpts(known map[string]state.Entry) scan.Options {
+	opts := scan.DefaultOptions()
+	opts.KnownFiles = make(map[string]scan.KnownFile, len(known))
+	for path, entry := range known {
+		opts.KnownFiles[path] = scan.KnownFile{Size: entry.Size, ModTime: entry.MTime, ContentHash: entry.ContentHash}
+	}
+	// Merge extra ignore dirs from config
+	for _, dir := range d.cfg.ExtraIgnoreDirs() {
+		opts.IgnoreDirs[dir] = true
+	}
+	return opts
 }
 
 func (d *Daemon) HealthHandler() http.Handler {
@@ -371,75 +571,6 @@ func (d *Daemon) startHealth(ctx context.Context) func() {
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}
-}
-
-func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
-	if d.store == nil {
-		return CycleStats{}, fmt.Errorf("daemon missing store")
-	}
-	if d.cfg.Root == "" {
-		return CycleStats{}, fmt.Errorf("daemon missing root")
-	}
-	paused, err := d.store.IsPaused()
-	if err != nil {
-		return CycleStats{}, err
-	}
-	if paused {
-		if err := d.store.Event("daemon.paused", "cycle skipped"); err != nil {
-			return CycleStats{}, err
-		}
-		return CycleStats{Root: d.cfg.Root}, nil
-	}
-	if !d.cfg.DryRun && !d.cfg.AllowLive {
-		return CycleStats{}, fmt.Errorf("daemon live mode requires allow_live=true")
-	}
-	remoteStats, err := d.ingestRemoteDelta(ctx)
-	if err != nil {
-		return CycleStats{}, err
-	}
-	files, err := scan.Walk(d.cfg.Root, scan.DefaultOptions())
-	if err != nil {
-		return CycleStats{}, err
-	}
-	seen := make(map[string]bool, len(files))
-	for _, f := range files {
-		seen[scan.DropboxPath(f.Path)] = true
-		if err := d.store.UpsertEntry(state.Entry{Path: scan.DropboxPath(f.Path), ContentHash: f.ContentHash, Size: f.Size, MTime: f.ModTime, State: "local_scanned"}); err != nil {
-			return CycleStats{}, err
-		}
-	}
-	missing, err := d.store.MarkMissingLocal(seen)
-	if err != nil {
-		return CycleStats{}, err
-	}
-	limit := d.workerLimit()
-	handler, err := d.workerHandler(ctx)
-	if err != nil {
-		return CycleStats{}, err
-	}
-	p := worker.Processor{Store: d.store, Handler: handler}
-	stats := CycleStats{Root: d.cfg.Root, LocalFiles: len(files), WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles, LocalMissing: missing}
-	for stats.WorkerProcessed < limit {
-		res, err := p.ProcessOne(ctx)
-		if err != nil {
-			return stats, err
-		}
-		if !res.Processed {
-			break
-		}
-		stats.WorkerProcessed++
-		if res.Completed {
-			stats.WorkerCompleted++
-		}
-		if res.Failed {
-			stats.WorkerFailed++
-		}
-	}
-	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s local_files=%d local_missing=%d remote_entries=%d remote_applied_files=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, stats.LocalFiles, stats.LocalMissing, stats.RemoteEntries, stats.RemoteAppliedFiles, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
-		return stats, err
-	}
-	d.log.Info("sync cycle complete", "root", stats.Root, "local_files", stats.LocalFiles, "local_missing", stats.LocalMissing, "remote_entries", stats.RemoteEntries, "remote_applied_files", stats.RemoteAppliedFiles, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
-	return stats, nil
 }
 
 func (d *Daemon) workerHandler(ctx context.Context) (worker.Handler, error) {

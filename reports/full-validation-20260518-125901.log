@@ -1,0 +1,144 @@
+# Full validation 2026-05-18T12:59:01+02:00
+
+## Git
+## master...origin/master
+?? reports/full-validation-20260518-125901.log
+11d00cb Revert "Expose Umbrel app dashboard on 8080"
+81d4e5e Expose Umbrel app dashboard on 8080
+4ece9bd Make Umbrel app proxy compatible
+f22e5c0 Wire Umbrel app dry-run daemon MVP
+c004946 Record staged prod canary results
+
+## GitHub Actions
+[{"conclusion":"success","createdAt":"2026-05-18T10:52:24Z","headSha":"11d00cbb204ac31061e7338d6a494d87d76a214d","status":"completed","url":"https://github.com/earlvanze/umbrel-dropbox-client/actions/runs/26029022428","workflowName":"CI"},{"conclusion":"success","createdAt":"2026-05-18T10:52:24Z","headSha":"11d00cbb204ac31061e7338d6a494d87d76a214d","status":"completed","url":"https://github.com/earlvanze/umbrel-dropbox-client/actions/runs/26029022301","workflowName":"Docker image"},{"conclusion":"success","createdAt":"2026-05-18T10:48:23Z","headSha":"81d4e5ef8f46a7949c7adcf65087c62f8e20527f","status":"completed","url":"https://github.com/earlvanze/umbrel-dropbox-client/actions/runs/26028838034","workflowName":"Docker image"},{"conclusion":"success","createdAt":"2026-05-18T10:48:23Z","headSha":"81d4e5ef8f46a7949c7adcf65087c62f8e20527f","status":"completed","url":"https://github.com/earlvanze/umbrel-dropbox-client/actions/runs/26028838001","workflowName":"CI"},{"conclusion":"success","createdAt":"2026-05-18T10:12:48Z","headSha":"4ece9bd530fb003bd57dfb4a57f19d84e83236fe","status":"completed","url":"https://github.com/earlvanze/umbrel-dropbox-client/actions/runs/26027216470","workflowName":"CI"},{"conclusion":"success","createdAt":"2026-05-18T10:12:48Z","headSha":"4ece9bd530fb003bd57dfb4a57f19d84e83236fe","status":"completed","url":"https://github.com/earlvanze/umbrel-dropbox-client/actions/runs/26027216464","workflowName":"Docker image"},{"conclusion":"success","createdAt":"2026-05-17T11:48:30Z","headSha":"f22e5c028dd47eb83a3d647f199aa5bf67857229","status":"completed","url":"https://github.com/earlvanze/umbrel-dropbox-client/actions/runs/25989981007","workflowName":"Docker image"},{"conclusion":"success","createdAt":"2026-05-17T11:48:30Z","headSha":"f22e5c028dd47eb83a3d647f199aa5bf67857229","status":"completed","url":"https://github.com/earlvanze/umbrel-dropbox-client/actions/runs/25989981000","workflowName":"CI"}]
+
+## Go tests
+?   	github.com/earlvanze/umbrel-dropbox-client/cmd/aptrepo	[no test files]
+ok  	github.com/earlvanze/umbrel-dropbox-client/cmd/umbrel-dropbox-client	(cached)
+?   	github.com/earlvanze/umbrel-dropbox-client/cmd/umbrel-dropbox-clientd	[no test files]
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/auth	(cached)
+?   	github.com/earlvanze/umbrel-dropbox-client/internal/config	[no test files]
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/conflict	(cached)
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/daemon	(cached)
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/dropbox	(cached)
+?   	github.com/earlvanze/umbrel-dropbox-client/internal/hash	[no test files]
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/integration	1.397s
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/reconcile	(cached)
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/scan	(cached)
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/state	(cached)
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/watch	(cached)
+ok  	github.com/earlvanze/umbrel-dropbox-client/internal/worker	(cached)
+
+## Docker build
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 690B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/golang:1.26-alpine
+#2 DONE 1.7s
+
+#3 [internal] load metadata for docker.io/library/alpine:3.22
+#3 DONE 1.7s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 135B done
+#4 DONE 0.0s
+
+#5 [build 1/4] FROM docker.io/library/golang:1.26-alpine@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d
+#5 DONE 0.0s
+
+#6 [stage-1 1/6] FROM docker.io/library/alpine:3.22@sha256:310c62b5e7ca5b08167e4384c68db0fd2905dd9c7493756d356e893909057601
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 29.81kB 0.0s done
+#7 DONE 0.0s
+
+#8 [build 2/4] WORKDIR /src
+#8 CACHED
+
+#9 [build 3/4] COPY . .
+#9 DONE 0.0s
+
+#10 [build 4/4] RUN go build -o /out/umbrel-dropbox-client ./cmd/umbrel-dropbox-client && go build -o /out/umbrel-dropbox-clientd ./cmd/umbrel-dropbox-clientd
+#10 0.312 go: downloading modernc.org/sqlite v1.50.0
+#10 12.16 go: downloading modernc.org/libc v1.72.0
+#10 12.16 go: downloading golang.org/x/sys v0.42.0
+#10 17.25 go: downloading github.com/dustin/go-humanize v1.0.1
+#10 17.25 go: downloading modernc.org/mathutil v1.7.1
+#10 17.25 go: downloading modernc.org/memory v1.11.0
+#10 17.25 go: downloading github.com/google/uuid v1.6.0
+#10 17.72 go: downloading github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec
+#10 39.08 go: downloading github.com/fsnotify/fsnotify v1.10.0
+#10 DONE 44.5s
+
+#11 [stage-1 3/6] COPY --from=build /out/umbrel-dropbox-client /usr/bin/umbrel-dropbox-client
+#11 CACHED
+
+#12 [stage-1 4/6] COPY --from=build /out/umbrel-dropbox-clientd /usr/bin/umbrel-dropbox-clientd
+#12 CACHED
+
+#13 [stage-1 5/6] COPY packaging/docker/umbrel-entrypoint.sh /usr/bin/umbrel-dropbox-client-umbrel-entrypoint
+#13 CACHED
+
+#14 [stage-1 2/6] RUN apk add --no-cache ca-certificates sqlite-libs
+#14 CACHED
+
+#15 [stage-1 6/6] RUN chmod +x /usr/bin/umbrel-dropbox-client-umbrel-entrypoint
+#15 CACHED
+
+#16 exporting to image
+#16 exporting layers done
+#16 writing image sha256:f182f7199a93cd8ab550c502d301df9b180197c8dbb67462fc19c0466d1086ad done
+#16 naming to docker.io/library/umbrel-dropbox-client:full-validation done
+#16 DONE 0.0s
+
+## Live Umbrel ports
+
+## Live app containers
+NAMES                                IMAGE                                                            STATUS                          PORTS
+umbrel-dropbox-client_app_proxy_1    getumbrel/app-proxy:1.0.0                                        Up 7 minutes                    0.0.0.0:8477->8477/tcp, [::]:8477->8477/tcp
+umbrel-dropbox-client_server_1       ghcr.io/earlvanze/umbrel-dropbox-client:latest                   Up 7 minutes                    8477/tcp
+umbrel-dropbox-client-tor_server-1   getumbrel/tor:0.4.7.8                                            Up 50 minutes                   
+
+## Dashboard proxy checks
+80: 200 text/html; charset=UTF-8
+8080: 200 text/html; charset=UTF-8
+<title>Umbrel
+<title>Umbrel
+
+## Dropbox app proxy check
+8477/status: 302 http://127.0.0.1:2000/?origin=host&app=umbrel-dropbox-client&path=%2Fstatus
+
+## Dropbox daemon logs
+starting umbrel-dropbox-clientd root=/dropbox/Obsidian remote_path=/Obsidian remote_delta=true dry_run=true health=0.0.0.0:8477
+2026/05/18 10:52:17 INFO daemon started root=/dropbox/Obsidian dry_run=true
+2026/05/18 10:52:17 INFO filesystem watcher started root=/dropbox/Obsidian
+2026/05/18 10:52:18 INFO sync cycle complete root=/dropbox/Obsidian local_files=142 local_missing=0 remote_entries=0 remote_applied_files=0 worker_processed=0 worker_completed=0 worker_failed=0
+2026/05/18 10:57:19 INFO sync cycle complete root=/dropbox/Obsidian local_files=142 local_missing=0 remote_entries=0 remote_applied_files=0 worker_processed=0 worker_completed=0 worker_failed=0
+
+## App state database
+local_scanned|142
+0
+daemon.cycle|root=/dropbox/Obsidian local_files=142 local_missing=0 remote_entries=0 remote_applied_files=0 worker_processed=0 worker_completed=0 worker_failed=0|2026-05-18T10:57:19Z
+remote.delta|previous_cursor=AAW294fV8SRpvOvLgHPyGAV7Ks4v8YYX6rLsBJfW3wWGwhb7Qz3CrYhQXOHcMmRK6w6OHxqz8Bkv40X361w3MQ4dGmbbScUh5hZrrHzfV3Ek_BelLaQ3P1tbaFsr0c9a6ATXIEF1t14k-qe9154yEkmBJFSPxP6QQf8fsFT3DJ5NKQR5wZMqhH8XKDXO4L--Tpsiyx5DqG1-B73BS-UypgLJ cursor=AAW9kEOGIFfjQuUPno51AiRFeH2NH9Tb5152V0DTdHaMSsJoAr1jlmX9D5QCRLBTlm2xtbFGOumz2zrHXKAhrg9w9G_OSt2NGR_bxgl2xGW0V_ZQXre_g0PSvpoZLuGdGUtO5IHa_i41qXEXT1Q1QwhTg1GpVwU0JHz-c-LH2dIgNoCYUH24DUBavmETxIZ6Hm2luzDLRcP6ALO47hhGzQ9Y pages=1 entries=0 applied_files=0|2026-05-18T10:57:19Z
+daemon.cycle|root=/dropbox/Obsidian local_files=142 local_missing=0 remote_entries=0 remote_applied_files=0 worker_processed=0 worker_completed=0 worker_failed=0|2026-05-18T10:52:18Z
+remote.delta|previous_cursor=AAXbR_Djio6ikDYDSTExkoYZTEo2dJgYoLzcP0jp42R588ojgfnTJhNesBrfcwOGQrryq7n8lxchHYiGbV3dJnqIuESNg3ePo6gw6zb9RFFQyMqvd2M895nYYLVcjGp-XHuVMsxfEO7BXC4AyEbI_-5dhD42lPkdLq0X4L38wwkM81gX6GnZishXXW-8ds5YvrP-cSjMRio-HYvNCaQfmAqi cursor=AAW294fV8SRpvOvLgHPyGAV7Ks4v8YYX6rLsBJfW3wWGwhb7Qz3CrYhQXOHcMmRK6w6OHxqz8Bkv40X361w3MQ4dGmbbScUh5hZrrHzfV3Ek_BelLaQ3P1tbaFsr0c9a6ATXIEF1t14k-qe9154yEkmBJFSPxP6QQf8fsFT3DJ5NKQR5wZMqhH8XKDXO4L--Tpsiyx5DqG1-B73BS-UypgLJ pages=1 entries=0 applied_files=0|2026-05-18T10:52:18Z
+daemon.start|/dropbox/Obsidian|2026-05-18T10:52:17Z
+init|/dropbox/Obsidian|2026-05-18T10:52:17Z
+daemon.stop|context canceled|2026-05-18T10:52:16Z
+daemon.cycle|root=/dropbox/Obsidian local_files=142 local_missing=0 remote_entries=0 remote_applied_files=0 worker_processed=0 worker_completed=0 worker_failed=0|2026-05-18T10:48:02Z
+
+## Systemd proxy
+● umbrel-dashboard-8080.socket - Umbrel dashboard proxy socket on port 8080
+     Loaded: loaded (/etc/systemd/system/umbrel-dashboard-8080.socket; enabled; preset: enabled)
+     Active: active (running) since Mon 2026-05-18 12:52:19 CEST; 7min ago
+ Invocation: a8f0527d65de41898cbdce9702ffc22e
+   Triggers: ● umbrel-dashboard-8080.service
+     Listen: 0.0.0.0:8080 (Stream)
+      Tasks: 0 (limit: 8926)
+     Memory: 8K (peak: 256K)
+        CPU: 1ms
+     CGroup: /system.slice/umbrel-dashboard-8080.socket

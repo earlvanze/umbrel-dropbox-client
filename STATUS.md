@@ -54,6 +54,30 @@ Validation:
 - `go test ./...` passed locally after worker handoff.
 - Commit requested but not created in this worker environment: `.git` is mounted read-only and `git add` failed creating `.git/index.lock`.
 
+## Release Blocker: CPU Usage — Partially Addressed
+
+- On 2026-05-23, `umbrel-dropbox-master` was stopped after `umbrel-dropbox-clientd` held ~237% CPU on a ~168k-file Dropbox tree.
+- Root cause: watch/timer cycles performed full-root scans and unchanged SQLite upserts on every cycle.
+- See `docs/CPU_RELEASE_BLOCKER.md` for original findings and required optimization gates.
+
+Implemented CPU optimizations (2026-06-01):
+
+- **Event-scoped reconciliation**: Watch events now collect dirty paths into a `DirtySet` and trigger incremental directory-scanned cycles instead of full-tree walks.
+- **Skip unchanged upserts**: `UpsertEntryIfChanged` queries existing rows before writing; unchanged entries (matching content_hash, size, mtime, state) are skipped entirely, eliminating ~160k unnecessary writes per cycle.
+- **Incremental `WalkDirs`**: New `scan.WalkDirs` scans only dirty directories plus root-level files, reducing per-cycle file walks from O(tree) to O(changed).
+- **Scoped missing detection**: `MarkMissingLocalInDirs` only queries entries under changed directory prefixes instead of scanning the entire entries table.
+- **Full-scan interval**: `full_scan_interval_seconds` config (default 3600s) ensures full-tree scans only happen hourly; periodic cycles between full scans are skipped if no dirty paths exist.
+- **Extended ignore dirs**: `DefaultIgnoreDirs` now skips `node_modules`, `.cache`, `.dropbox`, `.dropbox.cache`, `__pycache__`, `.venv`, `venv`, `.tox`, `.mypy_cache`, `.pytest_cache`, `.next`, `.nuxt`, `dist`, `build`, `.gradle`, `.idea`, `.vscode`, plus configurable `ignore_dirs` in daemon config.
+- **Dirty path tracking**: `watch.DirtySet` collects filesystem event paths, deduplicates into parent directories, and filters ignored directory names.
+
+Remaining acceptance gates before promotion:
+
+1. Idle CPU under 1-2% after initial indexing on a large tree.
+2. Single-file edit scans O(directory) paths, not O(root).
+3. No repeated full-root cycles during normal project activity.
+4. Full-tree repair is manual or infrequent and visibly budgeted.
+5. State DB writes per no-op cycle are near zero.
+
 ## ACFS integration
 
 Status: ACFS integration milestone complete.

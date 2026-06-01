@@ -605,7 +605,14 @@ func cmdSync(args []string) {
 	}
 	root, err = filepath.Abs(root)
 	must(err)
-	files, err := scan.Walk(root, scan.DefaultOptions())
+	known, err := s.LocalEntries()
+	must(err)
+	scanOpts := scan.DefaultOptions()
+	scanOpts.KnownFiles = make(map[string]scan.KnownFile, len(known))
+	for path, entry := range known {
+		scanOpts.KnownFiles[path] = scan.KnownFile{Size: entry.Size, ModTime: entry.MTime, ContentHash: entry.ContentHash}
+	}
+	files, err := scan.Walk(root, scanOpts)
 	must(err)
 	for _, f := range files {
 		must(s.UpsertEntry(state.Entry{
