@@ -7,7 +7,7 @@ services:
       APP_PORT: 8477
 
   server:
-    image: ghcr.io/earlvanze/umbrel-dropbox-client:latest
+    image: ghcr.io/earlvanze/umbrel-dropbox-client@sha256:98223cc7adcb0a0a36b6f296c6c57ef1d2d360046f0369911f8731718714478f
     restart: unless-stopped
     volumes:
       - ${APP_DATA_DIR}/data:/data
@@ -20,6 +20,7 @@ services:
       - UDC_TOKEN_FILE=/data/token.json
       - UDC_REMOTE_DELTA=auto
       - UDC_DRY_RUN=true
+      - UDC_ALLOW_LIVE=false
       - UDC_WATCH=true
       - UDC_SCAN_INTERVAL_SECONDS=300
       - UDC_HEALTH_ADDR=0.0.0.0:8477
