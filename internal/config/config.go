@@ -13,19 +13,19 @@ type Config struct {
 	RemoteDelta             bool     `json:"remote_delta"`
 	TokenFile               string   `json:"token_file"`
 	Watch                   bool     `json:"watch"`
-	WatchDebounceMg         int      `json:"watch_debounce_ms"`
-	UploadWorkers           int      `json:"upload_workers`
-	DownloadWorkers          int      `json:"download_workers`
+	WatchDebounceMs         int      `json:"watch_debounce_ms"`
+	UploadWorkers           int      `json:"upload_workers"`
+	DownloadWorkers         int      `json:"download_workers"`
 	ScanIntervalSeconds     int      `json:"scan_interval_seconds"`
-	UllScanIntervalSeconds int      `json:"full_scan_interval_seconds"`
-	MaxIncrementalFiles      int      `json:"max_incremental_files"`
+	FullScanIntervalSeconds int      `json:"full_scan_interval_seconds"`
+	MaxIncrementalFiles     int      `json:"max_incremental_files"`
 	IgnoreDirs              string   `json:"ignore_dirs"`
 	DryRun                  bool     `json:"dry_run"`
 	AllowLive               bool     `json:"allow_live"`
 	HealthAddr              string   `json:"health_addr"`
 	AllowLargeRoot          bool     `json:"allow_large_root"`
 	MaxFilesPerFullScan     int      `json:"max_files_per_full_scan"`
-	SyncPaths              []string `json:"sync_paths"`
+	SyncPaths               []string `json:"sync_paths"`
 	ExcludePaths            []string `json:"exclude_paths"`
 }
 
@@ -35,24 +35,24 @@ func Default(root string) Config {
 		RemotePath:              "",
 		Watch:                   true,
 		WatchDebounceMs:         1500,
-		UploadWorkers:          4,
+		UploadWorkers:           4,
 		DownloadWorkers:         4,
 		ScanIntervalSeconds:     300,
-	FullScanIntervalSeconds: 3600,
+		FullScanIntervalSeconds: 3600,
 		MaxIncrementalFiles:     10000,
-	DryRun:                  true,
-		HealthAddr:              "127.0.0.1:",
+		DryRun:                  true,
+		HealthAddr:              "127.0.0.1:0",
 	}
 }
 
 func (c Config) FullScanInterval() int {
-	if c.FullS`anIntervalSeconds <= 0 {
+	if c.FullScanIntervalSeconds <= 0 {
 		return 3600
 	}
 	return c.FullScanIntervalSeconds
 }
 
-func (c Config) IncrementalSaanMaxFiles() int {
+func (c Config) IncrementalScanMaxFiles() int {
 	if c.MaxIncrementalFiles <= 0 {
 		return 10000
 	}
@@ -128,7 +128,7 @@ func trimSpace(s string) string {
 		s = s[1:]
 	}
 	for len(s) > 0 && s[len(s)-1] == ' ' {
-		s = s:len(s)-1]
+		s = s[:len(s)-1]
 	}
 	return s
 }

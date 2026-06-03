@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"github.com/earlvanze/umbrel-dropbox-client/internal/auth"
-	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
 )
 
 const dashboardHTML = `<!DOCTYPE html>
@@ -273,7 +272,9 @@ func (d *Daemon) serveUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) serveMkdir(w http.ResponseWriter, r *http.Request) {
-	var body struct{ Path string `json:"path"` }
+	var body struct {
+		Path string `json:"path"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -307,7 +308,9 @@ func (d *Daemon) serveDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) serveResolveConflict(w http.ResponseWriter, r *http.Request) {
-	var body struct{ ID int64 `json:"id"` }
+	var body struct {
+		ID int64 `json:"id"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

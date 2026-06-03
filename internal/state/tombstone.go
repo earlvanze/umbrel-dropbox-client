@@ -44,7 +44,6 @@ func (s *Store) MarkMissingLocal(seen map[string]bool) (int, error) {
 	return len(missing), nil
 }
 
-
 // MarkMissingLocalInDirs marks entries as local_missing only if they are
 // under one of the specified directory prefixes. This is used during
 // incremental scans to avoid scanning the entire entries table.
@@ -61,7 +60,8 @@ func (s *Store) MarkMissingLocalInDirs(seen map[string]bool, dirPrefixes []strin
 	for _, dir := range dirPrefixes {
 		prefix := normalizeEntryPath(dir)
 		if prefix == "" {
-			conditions = append(conditions, "1=1")
+			// Match only root-level files.
+			conditions = append(conditions, "(path = '' OR (path LIKE '/%' AND path NOT LIKE '/%/%'))")
 		} else {
 			conditions = append(conditions, "(path = ? OR path LIKE ?)")
 			args = append(args, prefix, prefix+"/%")

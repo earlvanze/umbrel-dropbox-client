@@ -84,7 +84,7 @@ func (d *DirtySet) Reset() {
 // excluded from dirty path collection.
 func DefaultIgnoreDirNames() map[string]bool {
 	return map[string]bool{
-		".git":                    true,
+		".git":                   true,
 		".umbrel-dropbox-client": true,
 		"node_modules":           true,
 		".cache":                 true,
@@ -108,7 +108,9 @@ func SplitParentDirs(relPaths []string) []string {
 		p = strings.TrimPrefix(filepath.ToSlash(p), "/")
 		dir := filepath.Dir(p)
 		if dir == "." || dir == "" {
-			dir = ""
+			// No path separator means the input is a directory itself,
+			// not a file. Use the path as-is (e.g., a top-level subdir).
+			dir = p
 		} else {
 			dir = filepath.ToSlash(dir)
 		}

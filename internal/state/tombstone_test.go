@@ -68,7 +68,6 @@ func TestMarkMissingLocalNormalizesSeenPaths(t *testing.T) {
 	}
 }
 
-
 func TestMarkMissingLocalInDirs(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
@@ -130,5 +129,38 @@ func TestMarkMissingLocalInDirsEmptyPrefixScansAll(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected 1 missing, got %d", count)
+	}
+}
+
+func TestMarkMissingLocalInDirsEmptyPrefixIsRootOnly(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertEntry(Entry{Path: "/root.txt", ContentHash: "h1", Size: 1, MTime: time.Now(), State: "local_scanned"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertEntry(Entry{Path: "/sub/inner.txt", ContentHash: "h2", Size: 1, MTime: time.Now(), State: "local_scanned"}); err != nil {
+		t.Fatal(err)
+	}
+	// Empty prefix should NOT match /sub/inner.txt
+	count, err := s.MarkMissingLocalInDirs(map[string]bool{"/root.txt": true}, []string{""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 (root.txt seen, only root-level), got %d", count)
+	}
+	// Now mark inner.txt missing by not seeing it under a real prefix
+	count, err = s.MarkMissingLocalInDirs(map[string]bool{"/root.txt": true}, []string{"/sub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 (inner.txt not seen under /sub), got %d", count)
 	}
 }

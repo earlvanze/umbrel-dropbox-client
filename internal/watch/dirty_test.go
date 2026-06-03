@@ -1,4 +1,3 @@
-
 package watch
 
 import (
@@ -93,5 +92,21 @@ func TestDirtySetReset(t *testing.T) {
 	dirs := d.Dirs()
 	if dirs != nil {
 		t.Fatalf("expected nil after reset, got %v", dirs)
+	}
+}
+
+func TestSplitParentDirsKeepsSingleSegmentAsDirectory(t *testing.T) {
+	dirs := SplitParentDirs([]string{"sub"})
+	if len(dirs) != 1 || dirs[0] != "sub" {
+		t.Fatalf("expected [sub], got %v", dirs)
+	}
+}
+
+func TestSplitParentDirsKeepsNestedSubdirectory(t *testing.T) {
+	// Input is a path inside a subdir; SplitParentDirs returns the parent
+	// directory (one level up).
+	dirs := SplitParentDirs([]string{"sub/nested/file.txt"})
+	if len(dirs) != 1 || dirs[0] != "sub/nested" {
+		t.Fatalf("expected [sub/nested], got %v", dirs)
 	}
 }

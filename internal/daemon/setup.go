@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -129,7 +130,7 @@ func (d *Daemon) serveAuthDeviceStart(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"user_code":                deviceCode.UserCode,
+		"user_code":                 deviceCode.UserCode,
 		"verification_uri":          deviceCode.VerificationURI,
 		"verification_uri_complete": deviceCode.VerificationURIComplete,
 		"device_code":               deviceCode.DeviceCode,
@@ -192,7 +193,12 @@ func (d *Daemon) serveAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"status": status,
-		"error":  func() string { if deviceErr != nil { return deviceErr.Error() }; return "" }(),
+		"error": func() string {
+			if deviceErr != nil {
+				return deviceErr.Error()
+			}
+			return ""
+		}(),
 	})
 }
 

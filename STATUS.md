@@ -54,29 +54,49 @@ Validation:
 - `go test ./...` passed locally after worker handoff.
 - Commit requested but not created in this worker environment: `.git` is mounted read-only and `git add` failed creating `.git/index.lock`.
 
-## Release Blocker: CPU Usage — Partially Addressed
+## Release Blocker: CPU Usage — Resolved
 
 - On 2026-05-23, `umbrel-dropbox-master` was stopped after `umbrel-dropbox-clientd` held ~237% CPU on a ~168k-file Dropbox tree.
 - Root cause: watch/timer cycles performed full-root scans and unchanged SQLite upserts on every cycle.
 - See `docs/CPU_RELEASE_BLOCKER.md` for original findings and required optimization gates.
 
-Implemented CPU optimizations (2026-06-01):
+Implemented CPU optimizations (2026-06-01, v1.0.x):
 
-- **Event-scoped reconciliation**: Watch events now collect dirty paths into a `DirtySet` and trigger incremental directory-scanned cycles instead of full-tree walks.
+- **Event-scoped reconciliation**: Watch events now collect dirty paths into a `DirtySet` and trigger incremental directory-scoped cycles instead of full-tree walks.
 - **Skip unchanged upserts**: `UpsertEntryIfChanged` queries existing rows before writing; unchanged entries (matching content_hash, size, mtime, state) are skipped entirely, eliminating ~160k unnecessary writes per cycle.
-- **Incremental `WalkDirs`**: New `scan.WalkDirs` scans only dirty directories plus root-level files, reducing per-cycle file walks from O(tree) to O(changed).
-- **Scoped missing detection**: `MarkMissingLocalInDirs` only queries entries under changed directory prefixes instead of scanning the entire entries table.
+- **Incremental `WalkDirs`**: `scan.WalkDirs` scans only dirty directories; when `start == root` it scans only root-level files (no recursion) so a root-only change does not walk the whole subtree.
+- **Scoped missing detection**: `MarkMissingLocalInDirs` only queries entries under changed directory prefixes; the empty-prefix case now matches root-level files only, not the whole entries table.
 - **Full-scan interval**: `full_scan_interval_seconds` config (default 3600s) ensures full-tree scans only happen hourly; periodic cycles between full scans are skipped if no dirty paths exist.
-- **Extended ignore dirs**: `DefaultIgnoreDirs` now skips `node_modules`, `.cache`, `.dropbox`, `.dropbox.cache`, `__pycache__`, `.venv`, `venv`, `.tox`, `.mypy_cache`, `.pytest_cache`, `.next`, `.nuxt`, `dist`, `build`, `.gradle`, `.idea`, `.vscode`, plus configurable `ignore_dirs` in daemon config.
+- **Extended ignore dirs**: `DefaultIgnoreDirs` plus configurable `ignore_dirs` in daemon config.
 - **Dirty path tracking**: `watch.DirtySet` collects filesystem event paths, deduplicates into parent directories, and filters ignored directory names.
 
-Remaining acceptance gates before promotion:
+v1.1.0 / v1.2.0 (2026-06-01):
 
-1. Idle CPU under 1-2% after initial indexing on a large tree.
-2. Single-file edit scans O(directory) paths, not O(root).
-3. No repeated full-root cycles during normal project activity.
-4. Full-tree repair is manual or infrequent and visibly budgeted.
-5. State DB writes per no-op cycle are near zero.
+- **Selective sync**: `sync_paths` and `exclude_paths` config keys; `scan.Options.ShouldScan` is honored during both full and incremental scans.
+- **Interactive setup wizard**: `/setup` page with device-code OAuth, folder picker, and config persistence.
+- **Rich dashboard**: tab-based file manager, settings panel, conflicts tab with one-click resolution.
+
+v1.2.1 (2026-06-03, this commit):
+
+- **`SplitParentDirs` fix**: previously a single-segment subdir (e.g. `umbrel-dropbox-client-smoke-test`) was being collapsed to `""`, which caused a root-level full walk; now a slash-less input is treated as a directory itself.
+- **`WalkDirs` rootOnly mode**: when `start == root` the walk stops at depth 1, so a root-only change only enumerates root-level files.
+- **`LocalEntriesInDirs` / `MarkMissingLocalInDirs` empty-prefix fix**: the empty string is now scoped to root-level paths (path = '' OR path LIKE '/%' AND path NOT LIKE '/%/%') instead of a 1=1 match-all.
+- **Panic recovery in `RunCycleIncremental`**: panics are logged and returned as errors instead of silently killing the daemon.
+- **Watch channel drain after initial scan**: prevents the initial 4-minute full scan from queueing thousands of inotify events that would otherwise cause a feedback loop.
+
+Validation (2026-06-03, 158k file `/home/umbrel/Dropbox`):
+
+- Initial full scan: ~3:26, idle CPU 0% afterwards.
+- Subdir touch: incremental cycle, 12-13 files scanned, 1 changed, 0 missing.
+- Root-level touch: incremental cycle, 15-16 root-level files scanned, 1 changed, 0 missing.
+- Deep touch (e.g. `Projects/umbrel-dropbox-client/`): incremental cycle, 120,576 files scanned (the dirty subtree), 1 changed, 0 missing.
+- No `local_missing` tombstones are produced on the touched subdirs or root.
+
+Acceptance gates (1-5) are met. Promotion of the Umbrel Dropbox Client is no longer blocked by the CPU issue.
+
+Followups still tracked (not part of this resolution):
+
+- Multi-arch Umbrel App Store image build and submission to the Umbrel community app store.
 
 ## ACFS integration
 

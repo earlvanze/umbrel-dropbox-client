@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/earlvanze/umbrel-dropbox-client/internal/auth"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
@@ -162,10 +163,16 @@ func TestDashboardHandlerReturnsHTMLAndConflictsJSON(t *testing.T) {
 	if err := s.SetConfig("root", "/tmp/root"); err != nil {
 		t.Fatal(err)
 	}
+	tokDir := t.TempDir()
+	tokPath := filepath.Join(tokDir, "token.json")
+	tok := auth.Token{AccessToken: "test-access", RefreshToken: "test-refresh", TokenType: "bearer", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := auth.SaveToken(tokPath, tok); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.AddConflict("/a.txt", "hash_mismatch", "/tmp/root/a.txt", "rev1"); err != nil {
 		t.Fatal(err)
 	}
-	d := New(config.Config{Root: "/tmp/root", DryRun: true}, s, nil)
+	d := New(config.Config{Root: "/tmp/root", DryRun: true, TokenFile: tokPath}, s, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
@@ -173,8 +180,8 @@ func TestDashboardHandlerReturnsHTMLAndConflictsJSON(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "Umbrel Dropbox Client") || !strings.Contains(rr.Body.String(), "/a.txt") {
-		t.Fatalf("body=%s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), "Dropbox Client Dashboard") {
+		t.Fatalf("body missing title: %s", rr.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/conflicts", nil)

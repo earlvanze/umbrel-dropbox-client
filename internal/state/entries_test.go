@@ -63,7 +63,6 @@ func TestUpsertEntryRejectsEmptyNormalizedPath(t *testing.T) {
 	}
 }
 
-
 func TestUpsertEntryIfChangedSkipsUnchanged(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
@@ -134,5 +133,38 @@ func TestUpsertBatchReturnsChangedCount(t *testing.T) {
 	}
 	if changed != 0 {
 		t.Fatalf("expected 0 changed on re-upsert, got %d", changed)
+	}
+}
+
+func TestLocalEntriesInDirsEmptyPrefixIsRootOnly(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for _, p := range []string{"/root1.txt", "/root2.txt", "/sub/inner.txt"} {
+		if err := s.UpsertEntry(Entry{Path: p, ContentHash: "h", Size: 10, MTime: now, State: "local_scanned"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.LocalEntriesInDirs([]string{""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 root-level entries, got %d: %v", len(got), got)
+	}
+	if _, ok := got["/root1.txt"]; !ok {
+		t.Fatal("missing /root1.txt")
+	}
+	if _, ok := got["/root2.txt"]; !ok {
+		t.Fatal("missing /root2.txt")
+	}
+	if _, ok := got["/sub/inner.txt"]; ok {
+		t.Fatal("did not expect /sub/inner.txt in root-only query")
 	}
 }

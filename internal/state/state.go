@@ -106,33 +106,6 @@ func (s *Store) Status() (Status, error) {
 }
 
 type EventItem struct {
-	ID        int64  
-	Type      string 
-	Detail    string 
-	CreatedAt string 
-}
-
-func (s *Store) ListEvents(limit int) ([]EventItem, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	rows, err := s.db.Query(, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []EventItem
-	for rows.Next() {
-		var e EventItem
-		if err := rows.Scan(&e.ID, &e.Type, &e.Detail, &e.CreatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, e)
-	}
-	return out, rows.Err()
-}
-
-type EventItem struct {
 	ID        int64  `json:"id"`
 	Type      string `json:"type"`
 	Detail    string `json:"detail"`

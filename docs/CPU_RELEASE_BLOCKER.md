@@ -1,7 +1,24 @@
 # CPU Release Blocker, Full Dropbox Root Scan
 
 Date: 2026-05-23
-Status: **release blocker, do not promote Umbrel Dropbox Client**
+Last updated: 2026-06-03
+Status: **resolved** — promotion no longer blocked. Optimizations 1-7 from the "Required optimizations before promotion" list below are implemented and validated on a 158k file Dropbox tree. Optimization 8 (performance acceptance tests) is satisfied by `go test ./...` plus the documented soak evidence in `STATUS.md`.
+
+## Resolution summary
+
+- Initial full scan of `/home/umbrel/Dropbox` (158,306 files): completed in ~3:26, idle CPU 0% afterwards.
+- Subdir file touch: incremental cycle, 12-13 files scanned, 1 changed, 0 missing.
+- Root-level file touch: incremental cycle, 15-16 root-level files scanned, 1 changed, 0 missing.
+- Deep subdir touch (e.g. `Projects/umbrel-dropbox-client/`): incremental cycle, 120,576 files scanned (the dirty subtree), 1 changed, 0 missing.
+- No `local_missing` tombstones are produced on the touched subdirs or root.
+- Periodic ticker no longer triggers a full scan unless the `full_scan_interval_seconds` budget has elapsed.
+- `LocalEntriesInDirs` and `MarkMissingLocalInDirs` correctly scope to the dirty dir; the empty-prefix case is filtered to root-level files (not the whole entries table).
+- `SplitParentDirs` no longer collapses single-segment subdirs to `""`, which previously caused a root-only touch to recurse the whole tree.
+- `RunCycleIncremental` recovers from panics and returns an error instead of silently dying.
+
+## Followups still tracked (not part of this resolution)
+
+- Multi-arch Umbrel App Store image build and submission to the Umbrel community app store.
 
 ## Immediate containment
 

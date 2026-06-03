@@ -3,6 +3,7 @@ package state
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -120,6 +121,46 @@ func (s *Store) UpsertBatch(entries []Entry) (int, error) {
 		}
 	}
 	return changed, nil
+}
+
+// LocalEntriesInDirs returns entries that are under one of the specified
+// directory prefixes. This is used during incremental scans to avoid loading
+// the entire entries table.
+func (s *Store) LocalEntriesInDirs(dirPrefixes []string) (map[string]Entry, error) {
+	if len(dirPrefixes) == 0 {
+		return make(map[string]Entry), nil
+	}
+	var conditions []string
+	var args []any
+	for _, dir := range dirPrefixes {
+		prefix := normalizeEntryPath(dir)
+		if prefix == "" {
+			// Match only root-level files: paths that either are empty
+			// or have a single segment after the leading slash.
+			conditions = append(conditions, "(path = '' OR (path LIKE '/%' AND path NOT LIKE '/%/%'))")
+		} else {
+			conditions = append(conditions, "(path = ? OR path LIKE ?)")
+			args = append(args, prefix, prefix+"/%")
+		}
+	}
+	where := "content_hash != '' AND state IN ('local_scanned','clean') AND (" + strings.Join(conditions, " OR ") + ")"
+	query := "select path, coalesce(dropbox_id,''), coalesce(rev,''), coalesce(content_hash,''), size, mtime_unix, state from entries where " + where
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]Entry)
+	for rows.Next() {
+		var e Entry
+		var mtime int64
+		if err := rows.Scan(&e.Path, &e.DropboxID, &e.Rev, &e.ContentHash, &e.Size, &mtime, &e.State); err != nil {
+			return nil, err
+		}
+		e.MTime = time.Unix(mtime, 0).UTC()
+		out[e.Path] = e
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) DeleteEntry(path string) error {

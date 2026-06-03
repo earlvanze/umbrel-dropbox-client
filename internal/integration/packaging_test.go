@@ -82,7 +82,7 @@ func TestUmbrelAppPackagingStartsDryRunDaemon(t *testing.T) {
 		"APP_PORT: 8477",
 		"/home/umbrel/Dropbox:/dropbox",
 		"UDC_DRY_RUN=true",
-		"UDC_ROOT=/dropbox/Obsidian",
+		"UDC_ROOT=/dropbox",
 		"UDC_REMOTE_DELTA=auto",
 	} {
 		if !strings.Contains(compose, want) {
