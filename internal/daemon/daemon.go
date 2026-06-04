@@ -350,6 +350,18 @@ func (d *Daemon) HealthHandler() http.Handler {
 			d.serveStatusJSON(w, r)
 		case "/conflicts":
 			d.serveConflictsJSON(w, r)
+		case "/api/conflicts":
+			if r.Method == http.MethodPost {
+				d.serveResolveConflict(w, r)
+				return
+			}
+			d.serveAPIConflicts(w, r)
+		case "/api/conflicts/resolve":
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			d.serveResolveConflict(w, r)
 		default:
 			http.NotFound(w, r)
 		}

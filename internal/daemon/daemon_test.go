@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -192,6 +193,59 @@ func TestDashboardHandlerReturnsHTMLAndConflictsJSON(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), `"Path":"/a.txt"`) {
 		t.Fatalf("body=%s", rr.Body.String())
+	}
+}
+
+func TestAPIRoutesExposeConflictsListAndResolve(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetConfig("root", "/tmp/root"); err != nil {
+		t.Fatal(err)
+	}
+	tokDir := t.TempDir()
+	tokPath := filepath.Join(tokDir, "token.json")
+	tok := auth.Token{AccessToken: "test-access", RefreshToken: "test-refresh", TokenType: "bearer", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := auth.SaveToken(tokPath, tok); err != nil {
+		t.Fatal(err)
+	}
+	conflictID, err := s.AddConflict("/a.txt", "hash_mismatch", "/tmp/root/a.txt", "rev1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: "/tmp/root", DryRun: true, TokenFile: tokPath}, s, nil)
+
+	// GET /api/conflicts lists conflicts
+	req := httptest.NewRequest(http.MethodGet, "/api/conflicts", nil)
+	rr := httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"Path":"/a.txt"`) {
+		t.Fatalf("list body=%s", rr.Body.String())
+	}
+
+	// POST /api/conflicts/resolve marks the conflict resolved
+	body := strings.NewReader(`{"id":` + fmt.Sprintf("%d", conflictID) + `}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/conflicts/resolve", body)
+	rr = httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("resolve code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	items, err := s.ListConflicts(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected 0 conflicts after resolve, got %d", len(items))
+	}
+
+	// GET on /api/conflicts/resolve is rejected
+	req = httptest.NewRequest(http.MethodGet, "/api/conflicts/resolve", nil)
+	rr = httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET on /api/conflicts/resolve code=%d want 405", rr.Code)
 	}
 }
 
