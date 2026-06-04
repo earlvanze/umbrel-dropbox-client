@@ -80,20 +80,26 @@ func (d *Daemon) serveConfigAPI(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "root is required", http.StatusBadRequest)
 			return
 		}
-		if err := config.Save(d.cfgPath(), newCfg); err != nil {
+		if err := config.Save(d.onDiskConfigPath(), newCfg); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		prev := d.cfg
 		d.cfg = newCfg
+		restartRequired := ConfigRestartRequired(prev, newCfg)
 		_ = d.store.Event("config.updated", "")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":               true,
+			"restart_required": restartRequired,
+			"restart_fields":   RequiredRestartFields,
+		})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func (d *Daemon) cfgPath() string {
+func (d *Daemon) onDiskConfigPath() string {
 	if d.cfg.TokenFile != "" {
 		dir := filepath.Dir(d.cfg.TokenFile)
 		return filepath.Join(dir, "config.json")

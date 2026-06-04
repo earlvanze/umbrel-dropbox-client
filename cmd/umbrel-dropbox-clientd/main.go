@@ -31,7 +31,9 @@ func main() {
 	_ = st.Init()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := daemon.New(cfg, st, slog.Default()).Run(ctx); err != nil && err != context.Canceled {
+	d := daemon.New(cfg, st, slog.Default())
+	d.SetConfigPath(*cfgPath)
+	if err := d.Run(ctx); err != nil && err != context.Canceled {
 		slog.Error("daemon stopped", "error", err)
 		os.Exit(1)
 	}

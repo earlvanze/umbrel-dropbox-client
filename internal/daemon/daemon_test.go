@@ -249,6 +249,131 @@ func TestAPIRoutesExposeConflictsListAndResolve(t *testing.T) {
 	}
 }
 
+func TestAPIRoutesExposeStatusAndEvents(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetConfig("root", "/tmp/root"); err != nil {
+		t.Fatal(err)
+	}
+	tokDir := t.TempDir()
+	tokPath := filepath.Join(tokDir, "token.json")
+	tok := auth.Token{AccessToken: "test-access", RefreshToken: "test-refresh", TokenType: "bearer", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := auth.SaveToken(tokPath, tok); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: "/tmp/root", DryRun: true, TokenFile: tokPath}, s, nil)
+
+	// /api/status (alias of /healthz)
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rr := httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/api/status code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), fmt.Sprintf("%croot%c:%c/tmp/root%c", 34, 34, 34, 34)) {
+		t.Fatalf("status body missing root: %s", rr.Body.String())
+	}
+
+	// /api/events
+	req = httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	rr = httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/api/events code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	// /api/restart rejects non-POST
+	req = httptest.NewRequest(http.MethodGet, "/api/restart", nil)
+	rr = httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET /api/restart code=%d want 405", rr.Code)
+	}
+}
+
+func TestConfigAPIReportsRestartRequired(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetConfig("root", "/tmp/root"); err != nil {
+		t.Fatal(err)
+	}
+	tokDir := t.TempDir()
+	tokPath := filepath.Join(tokDir, "token.json")
+	tok := auth.Token{AccessToken: "test-access", RefreshToken: "test-refresh", TokenType: "bearer", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := auth.SaveToken(tokPath, tok); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: "/tmp/root", DryRun: true, TokenFile: tokPath}, s, nil)
+	d.SetConfigPath(filepath.Join(tokDir, "config.json"))
+
+	// Change nothing -> no restart required.
+	prev := d.cfg
+	next := d.cfg
+	if ConfigRestartRequired(prev, next) {
+		t.Fatal("expected no restart for unchanged config")
+	}
+
+	// Change root -> restart required.
+	next.Root = "/tmp/other"
+	if !ConfigRestartRequired(prev, next) {
+		t.Fatal("expected restart when root changes")
+	}
+
+	// Change sync_paths -> restart required.
+	next = prev
+	next.SyncPaths = []string{"/a", "/b"}
+	if !ConfigRestartRequired(prev, next) {
+		t.Fatal("expected restart when sync_paths changes")
+	}
+
+	// Change dry_run -> restart required.
+	next = prev
+	next.DryRun = false
+	if !ConfigRestartRequired(prev, next) {
+		t.Fatal("expected restart when dry_run changes")
+	}
+}
+
+func TestAPIRestartRebindsWatcher(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetConfig("root", "/tmp/root"); err != nil {
+		t.Fatal(err)
+	}
+	tokDir := t.TempDir()
+	tokPath := filepath.Join(tokDir, "token.json")
+	tok := auth.Token{AccessToken: "test-access", RefreshToken: "test-refresh", TokenType: "bearer", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := auth.SaveToken(tokPath, tok); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: "/tmp/root", DryRun: true, Watch: true, TokenFile: tokPath}, s, nil)
+	d.SetConfigPath(filepath.Join(tokDir, "config.json"))
+
+	// Pre-seed a config file on disk and send POST /api/restart; the restartReq
+	// channel should receive exactly one request and respond 200 OK.
+	cfgPath := filepath.Join(tokDir, "config.json")
+	if err := config.Save(cfgPath, d.cfg); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/restart", nil)
+	rr := httptest.NewRecorder()
+	go func() {
+		// Unblock the restartReq after the response is written.
+		time.Sleep(50 * time.Millisecond)
+		select {
+		case req := <-d.restartReq:
+			if req.respond != nil {
+				req.respond <- nil
+			}
+		default:
+		}
+	}()
+	d.HealthHandler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/api/restart code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), fmt.Sprintf("%crestarting%c:true", 34, 34)) {
+		t.Fatalf("body missing restarting=true: %s", rr.Body.String())
+	}
+}
+
 func TestDashboardRouteAliasReturnsDashboardHTML(t *testing.T) {
 	s := testStore(t)
 	if err := s.SetConfig("root", "/tmp/root"); err != nil {

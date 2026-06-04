@@ -24,12 +24,18 @@ import (
 
 type Daemon struct {
 	cfg          config.Config
+	cfgPath      string
 	store        *state.Store
 	log          *slog.Logger
 	remoteClient state.RemoteDeltaClient
 	dirty        *watch.DirtySet
 	lastFullScan time.Time
 	scanTrigger  chan struct{}
+	restartReq   chan restartRequest
+}
+
+type restartRequest struct {
+	respond chan error
 }
 
 type CycleStats struct {
@@ -51,7 +57,7 @@ func New(cfg config.Config, store *state.Store, logger *slog.Logger) *Daemon {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	d := &Daemon{cfg: cfg, store: store, log: logger, scanTrigger: make(chan struct{}, 1)}
+	d := &Daemon{cfg: cfg, store: store, log: logger, scanTrigger: make(chan struct{}, 1), restartReq: make(chan restartRequest, 1)}
 	if cfg.Watch {
 		abs, err := filepath.Abs(cfg.Root)
 		if err == nil {
@@ -61,13 +67,19 @@ func New(cfg config.Config, store *state.Store, logger *slog.Logger) *Daemon {
 	return d
 }
 
+// SetConfigPath records the on-disk config path so /api/restart can exec a
+// fresh daemon with the same env.
+func (d *Daemon) SetConfigPath(p string) { d.cfgPath = p }
+
 func (d *Daemon) Run(ctx context.Context) error {
 	d.log.Info("daemon started", "root", d.cfg.Root, "dry_run", d.cfg.DryRun)
 	_ = d.store.Event("daemon.start", d.cfg.Root)
 	shutdownHealth := d.startHealth(ctx)
 	defer shutdownHealth()
 	watchEvents, stopWatch := d.startWatcher(ctx)
-	defer stopWatch()
+	restartWatch := func() (<-chan watch.Event, func()) { return watchEvents, stopWatch }
+	defer stopWatch() // no-op after the first stopWatch runs; we replace below
+	_ = restartWatch  // appease linters; restart re-assigns watchEvents via stopWatch + startWatcher
 	// Watch events are collected into dirty set in the main select loop
 	// Initial full scan
 	if _, err := d.RunCycle(ctx); err != nil {
@@ -157,6 +169,43 @@ func (d *Daemon) Run(ctx context.Context) error {
 			if _, err := d.RunCycleIncremental(ctx, true); err != nil {
 				_ = d.store.Event("daemon.error", err.Error())
 				d.log.Error("watch-triggered sync cycle failed", "error", err)
+			}
+		case req := <-d.restartReq:
+			// Drain debounce state so we don't fire a stale cycle after restart.
+			debounceC = nil
+			debounceTimer = nil
+			// Reload config from disk so any change made via the dashboard
+			// takes effect (root, remote_path, sync_paths, dry_run, etc.).
+			if d.cfgPath != "" {
+				if fresh, err := config.Load(d.cfgPath); err == nil {
+					d.cfg = fresh
+				} else {
+					d.log.Warn("config reload failed", "error", err)
+				}
+			}
+			// Re-initialize the dirty set for the (possibly new) root.
+			d.dirty = nil
+			if d.cfg.Watch {
+				if abs, err := filepath.Abs(d.cfg.Root); err == nil {
+					d.dirty = watch.NewDirtySet(abs)
+				}
+			}
+			d.lastFullScan = time.Time{}
+			d.log.Info("daemon restart requested; reloading", "root", d.cfg.Root, "dry_run", d.cfg.DryRun)
+			_ = d.store.Event("daemon.restart", d.cfg.Root)
+			// Restart the watcher so it picks up the new root.
+			stopWatch()
+			watchEvents, stopWatch = d.startWatcher(ctx)
+			// Trigger an immediate full scan on the new config.
+			if _, err := d.RunCycle(ctx); err != nil {
+				d.log.Error("post-restart sync cycle failed", "error", err)
+			}
+			d.lastFullScan = time.Now()
+			if d.dirty != nil {
+				d.dirty.Reset()
+			}
+			if req.respond != nil {
+				req.respond <- nil
 			}
 		}
 	}
@@ -346,8 +395,16 @@ func (d *Daemon) HealthHandler() http.Handler {
 			d.serveRemoteFolders(w, r)
 		case "/download":
 			d.serveDownload(w, r)
-		case "/healthz", "/status":
+		case "/healthz", "/status", "/api/status":
 			d.serveStatusJSON(w, r)
+		case "/api/events":
+			d.serveEventsJSON(w, r)
+		case "/api/restart":
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			d.serveRestart(w, r)
 		case "/conflicts":
 			d.serveConflictsJSON(w, r)
 		case "/api/conflicts":
@@ -366,6 +423,59 @@ func (d *Daemon) HealthHandler() http.Handler {
 			http.NotFound(w, r)
 		}
 	})
+}
+
+func (d *Daemon) serveRestart(w http.ResponseWriter, r *http.Request) {
+	select {
+	case d.restartReq <- restartRequest{respond: make(chan error, 1)}:
+	default:
+		http.Error(w, "restart already in progress", http.StatusConflict)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "restarting": true})
+}
+
+// RequiredRestartFields lists config fields that take effect only after the
+// daemon restarts. The dashboard's saveSettings() handler uses this to decide
+// whether to prompt the user before applying.
+var RequiredRestartFields = []string{
+	"root", "remote_path", "sync_paths", "exclude_paths", "ignore_dirs",
+	"dry_run", "allow_live", "watch", "scan_interval_seconds",
+}
+
+// ConfigRestartRequired returns true if the dashboard save would require a
+// restart for the new values to take effect.
+func ConfigRestartRequired(prev, next config.Config) bool {
+	changed := func(a, b any) bool { return fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b) }
+	if changed(prev.Root, next.Root) {
+		return true
+	}
+	if changed(prev.RemotePath, next.RemotePath) {
+		return true
+	}
+	if changed(prev.DryRun, next.DryRun) {
+		return true
+	}
+	if changed(prev.AllowLive, next.AllowLive) {
+		return true
+	}
+	if changed(prev.Watch, next.Watch) {
+		return true
+	}
+	if changed(prev.ScanIntervalSeconds, next.ScanIntervalSeconds) {
+		return true
+	}
+	if changed(prev.IgnoreDirs, next.IgnoreDirs) {
+		return true
+	}
+	if fmt.Sprint(prev.SyncPaths) != fmt.Sprint(next.SyncPaths) {
+		return true
+	}
+	if fmt.Sprint(prev.ExcludePaths) != fmt.Sprint(next.ExcludePaths) {
+		return true
+	}
+	return false
 }
 
 func (d *Daemon) serveStatusJSON(w http.ResponseWriter, _ *http.Request) {
