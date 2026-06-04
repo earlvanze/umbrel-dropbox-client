@@ -1,10 +1,10 @@
 manifestVersion: 1.1
 id: umbrel-dropbox-client
-name: Dropbox Client
+name: Dropbox
 tagline: Safe, scoped Dropbox sync for Umbrel with dry-run defaults
 icon: https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-client/master/data/icons/icon.svg
 category: files
-version: "1.2.2"
+version: "1.2.3"
 description: >-
   A Linux-first Dropbox sync daemon for Umbrel. Keeps your Dropbox files in sync
   with a local folder, with a built-in web dashboard for status, conflicts, and
@@ -13,7 +13,7 @@ description: >-
   controls, conflict resolution, and an interactive setup wizard. Ships with
   dry-run mode enabled by default so you can preview every action before any
   file is touched. Live transfers require explicit opt-in via environment
-  variables, making it safe to install from the app store.
+  variables, making it safe to install from the app store. NOTE: Dropbox is a trademark of Dropbox, Inc.; this app is an independent community project and is not affiliated with Dropbox, Inc.
 developer: Earl Co
 website: https://github.com/earlvanze/umbrel-dropbox-client
 repo: https://github.com/earlvanze/umbrel-dropbox-client
@@ -25,17 +25,15 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >-
-  Conflict dashboard routes fix. v1.2.2 wires /api/conflicts and /api/conflicts/resolve
-  into the HealthHandler switch (they were previously returning 404 from the
-  dashboard's Conflicts tab). v1.2.1's watch-debounce path repairs that
-  make incremental scans actually fire on large trees: a root-only change now
-  scans only the root directory, the dirty-dir split keeps single-segment
-  subdirs from collapsing to the empty root, and missing-file detection is
-  scoped to the dirty prefixes. The 158k file soak holds at 0% idle CPU and
-  a single touch in a subdir scans only the dirty subtree. The previous
-  rich dashboard with file manager, settings, and conflict resolution is
-  retained, with a panic-recover safety net in the incremental cycle so a
-  transient scan error can no longer silently kill the daemon.
+  Trademark notice: Dropbox is a trademark of Dropbox, Inc. This app is not
+  affiliated with, endorsed by, or sponsored by Dropbox, Inc. Use of the
+  Dropbox name is for identification and interoperability purposes only.
+  v1.2.3 renames the app to "Dropbox" (without "Client") to make clear that
+  this is a third-party Umbrel community project, not an official Dropbox
+  product, and swaps the icon for a neutral folder glyph that does not use
+  the Dropbox brand. It also adds a /dashboard route alias to fix the 404
+  in the Umbrel UI, updates the page title and the dashboard brand text,
+  and carries forward the v1.2.2 conflict routes fix.
 dependencies: []
 submitter: Earl Co
 submission: https://github.com/earlvanze/umbrel-dropbox-client

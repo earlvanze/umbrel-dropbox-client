@@ -16,7 +16,7 @@ const dashboardHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dropbox Client Dashboard</title>
+<title>Dropbox — Dashboard</title>
 <style>
 :root{--primary:#0061ff;--primary-dark:#0050d8;--bg:#f8f9fb;--card:#fff;--text:#18181b;--muted:#71717a;--border:#e4e4e7;--danger:#dc2626;--success:#16a34a;--warning:#ca8a04;--radius:.5rem;--shadow:0 1px 3px rgba(0,0,0,.08)}
 *{box-sizing:border-box}
@@ -89,9 +89,10 @@ tr:hover td{background:#f4f4f5}
 <body>
 <div class="app">
 <aside class="sidebar">
-<div class="brand"><svg viewBox="0 0 24 24"><path d="M12 2L2 9l10 7 10-7-10-7zM2 15l10 7 10-7M2 18l10 7 10-7"/></svg>Dropbox Client</div>
+<div class="brand"><svg viewBox="0 0 24 24"><path d="M12 2L2 9l10 7 10-7-10-7zM2 15l10 7 10-7M2 18l10 7 10-7"/></svg>
+Dropbox</div>
 <nav>
-<a href="#" data-tab="dashboard" class="active">Dashboard</a>
+<a href="/dashboard" data-tab="dashboard" class="active">Dashboard</a>
 <a href="#" data-tab="files">Files</a>
 <a href="#" data-tab="settings">Settings</a>
 <a href="#" data-tab="conflicts">Conflicts</a>
@@ -157,9 +158,8 @@ function $1(sel){return document.querySelector(sel)}
 function showToast(msg,type){const t=$1('#toast');t.textContent=msg;t.className='toast '+type+' show';setTimeout(()=>t.classList.remove('show'),3000)}
 async function api(method,path,body){const opts={method};if(body){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(body)}const r=await fetch(path,opts);if(!r.ok){const txt=await r.text();throw new Error(txt.slice(0,200))}if(r.status===204)return{};return r.json()}
 
-function switchTab(tab){document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.dataset.tab===tab));['dashboard','files','settings','conflicts'].forEach(t=>$1('#tab-'+t).classList.toggle('hidden',t!==tab));if(tab==='files')loadFiles();if(tab==='dashboard')loadDashboard();if(tab==='settings')loadSettings();if(tab==='conflicts')loadConflicts();history.replaceState(null,'','#'+tab)}
-document.querySelectorAll('nav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();switchTab(a.dataset.tab)}));
-window.addEventListener('hashchange',()=>switchTab(location.hash.slice(1)||'dashboard'));
+function switchTab(tab){document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.dataset.tab===tab));['dashboard','files','settings','conflicts'].forEach(t=>$1('#tab-'+t).classList.toggle('hidden',t!==tab));if(tab==='files')loadFiles();if(tab==='dashboard')loadDashboard();if(tab==='settings')loadSettings();if(tab==='conflicts')loadConflicts();const target=tab==='dashboard'?'/dashboard':'/'+tab;if(location.pathname!==target){window.history.replaceState({},'',target)}}
+document.querySelectorAll('nav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();if(a.dataset.tab==='dashboard'){window.history.pushState({},'','/dashboard');switchTab('dashboard');return}switchTab(a.dataset.tab)}));
 
 async function loadDashboard(){try{const s=await api('GET','/api/status');isPaused=s.paused;$1('#btn-pause').textContent=isPaused?'Resume':'Pause';const cards=[{t:'Status',v:isPaused?'Paused':'Active',sub:isPaused?'Sync is paused':'Running normally',cls:isPaused?'paused':'active'},{t:'Entries',v:s.entries,sub:'tracked files'},{t:'Pending Ops',v:s.pending_ops,sub:'queued operations'},{t:'Conflicts',v:s.conflicts,sub:'unresolved'}];$1('#status-cards').innerHTML=cards.map(c=>'<div class="card"><h3>'+c.t+'</h3><div class="value">'+c.v+'</div><div class="sub">'+c.sub+'</div></div>').join('');$1('#setup-link').style.display=s.has_token&&s.has_root?'none':'inline-flex';const ev=await api('GET','/api/events');$1('#events-body').innerHTML=ev.events&&ev.events.length?ev.events.map(e=>'<tr><td>'+new Date(e.created_at).toLocaleString()+'</td><td><span class="badge">'+e.type+'</span></td><td>'+(e.detail||'')+'</td></tr>').join(''):'<tr><td colspan="3" class="empty">No events yet</td></tr>';}catch(e){showToast(e.message,'error')}}
 
@@ -180,7 +180,17 @@ async function saveSettings(e){e.preventDefault();const root=$1('#setting-root')
 async function loadConflicts(){try{const data=await api('GET','/api/conflicts');const tbody=$1('#conflicts-body');if(!data.conflicts||!data.conflicts.length){tbody.innerHTML='<tr><td colspan="4" class="empty">No conflicts</td></tr>';return}tbody.innerHTML=data.conflicts.map(c=>'<tr><td>'+c.path+'</td><td>'+c.reason+'</td><td>'+new Date(c.created_at).toLocaleString()+'</td><td><button class="btn secondary" onclick="resolveConflict('+c.id+')">Resolve</button></td></tr>').join('');}catch(e){showToast(e.message,'error')}}
 async function resolveConflict(id){if(!confirm('Resolve this conflict?'))return;try{await api('POST','/api/conflicts/resolve',{id:id});showToast('Resolved','success');loadConflicts();loadDashboard()}catch(e){showToast(e.message,'error')}}
 
-switchTab(location.hash.slice(1)||'dashboard');
+function syncTabFromLocation(){
+  const path=location.pathname.replace(/^\/+|>+$/g,'');
+  let tab='dashboard';
+  if(path==='files')tab='files';
+  else if(path==='settings')tab='settings';
+  else if(path==='conflicts')tab='conflicts';
+  else if(path==='dashboard'||path==='')tab='dashboard';
+  switchTab(tab);
+}
+window.addEventListener('popstate',syncTabFromLocation);
+syncTabFromLocation();
 </script>
 </body>
 </html>

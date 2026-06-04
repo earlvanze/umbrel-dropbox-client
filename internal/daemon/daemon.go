@@ -326,7 +326,7 @@ func (d *Daemon) buildScanOpts(known map[string]state.Entry) scan.Options {
 func (d *Daemon) HealthHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/", "/ui":
+		case "/", "/ui", "/dashboard":
 			d.serveDashboard(w, r)
 		case "/setup":
 			d.serveSetupHTML(w, r)

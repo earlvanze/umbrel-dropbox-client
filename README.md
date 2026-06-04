@@ -1,8 +1,12 @@
-# Umbrel Dropbox Client
+# Umbrel Dropbox
 
 Linux-first Dropbox sync daemon for Umbrel and general Linux desktops.
 
 This is intended to become a proper sync client, not a thin wrapper around the official Linux Dropbox daemon.
+
+## Trademark notice
+
+**Dropbox** is a trademark of Dropbox, Inc. This project is an independent, community-maintained Umbrel app and is **not affiliated with, endorsed by, or sponsored by Dropbox, Inc.** All references to the Dropbox™ name, logo, and service are for identification and interoperability purposes only. The app implements the published Dropbox HTTP API to sync files between a local folder and a user's own Dropbox account; it makes no claim of ownership over the Dropbox brand or trademarks.
 
 ## Goals
 

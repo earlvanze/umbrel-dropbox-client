@@ -181,7 +181,7 @@ func TestDashboardHandlerReturnsHTMLAndConflictsJSON(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "Dropbox Client Dashboard") {
+	if !strings.Contains(rr.Body.String(), "Dropbox — Dashboard") {
 		t.Fatalf("body missing title: %s", rr.Body.String())
 	}
 
@@ -246,6 +246,35 @@ func TestAPIRoutesExposeConflictsListAndResolve(t *testing.T) {
 	d.HealthHandler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET on /api/conflicts/resolve code=%d want 405", rr.Code)
+	}
+}
+
+func TestDashboardRouteAliasReturnsDashboardHTML(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetConfig("root", "/tmp/root"); err != nil {
+		t.Fatal(err)
+	}
+	tokDir := t.TempDir()
+	tokPath := filepath.Join(tokDir, "token.json")
+	tok := auth.Token{AccessToken: "test-access", RefreshToken: "test-refresh", TokenType: "bearer", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := auth.SaveToken(tokPath, tok); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: "/tmp/root", DryRun: true, TokenFile: tokPath}, s, nil)
+
+	for _, p := range []string{"/", "/ui", "/dashboard"} {
+		req := httptest.NewRequest(http.MethodGet, p, nil)
+		rr := httptest.NewRecorder()
+		d.HealthHandler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s code=%d body=%s", p, rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "Dropbox — Dashboard") {
+			t.Fatalf("%s title missing in body: %s", p, rr.Body.String())
+		}
+		if strings.Contains(rr.Body.String(), "Dropbox Client") {
+			t.Fatalf("%s still contains 'Dropbox Client' in body", p)
+		}
 	}
 }
 

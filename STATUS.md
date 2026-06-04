@@ -123,6 +123,23 @@ Validation (2026-06-04, fresh 158k-file soak against `/home/umbrel/Dropbox`):
   subtree), not the full root — confirming the watch-debounce path is now scope-bounded.
 - Mode is correctly reported as `incremental` (never silently falling back to `full` after a single touch).
 
+
+v1.2.3 (2026-06-04):
+
+- **Trademark disclaimer + app rename**: README, manifests, and dashboard now
+  carry an explicit trademark notice ("Dropbox is a trademark of Dropbox, Inc.
+  This app is not affiliated with, endorsed by, or sponsored by Dropbox, Inc.").
+  The Umbrel App Store name is now "Dropbox" (was "Dropbox Client") to make it
+  clear this is an independent community project, not an official Dropbox product.
+  The app icon has been replaced with a neutral folder + sync-arrows glyph that
+  does not use the Dropbox brand.
+- **Dashboard 404 fix**: `GET /dashboard` was returning 404 from the Umbrel UI
+  because the daemon's `HealthHandler` only registered `/` and `/ui`. v1.2.3
+  aliases `/dashboard` to the same handler, and rewires the in-page nav so the
+  Dashboard link points at `/dashboard` and tab switches update the address
+  bar via the History API (so reload / bookmark / share all work). v1.2.2's
+  `/api/conflicts` and `/api/conflicts/resolve` routes are retained.
+
 **All release blockers resolved as of 2026-06-04.**
 
 v1.2.2 (2026-06-04):
