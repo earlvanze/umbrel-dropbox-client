@@ -123,12 +123,25 @@ Validation (2026-06-04, fresh 158k-file soak against `/home/umbrel/Dropbox`):
   subtree), not the full root — confirming the watch-debounce path is now scope-bounded.
 - Mode is correctly reported as `incremental` (never silently falling back to `full` after a single touch).
 
-Followups still tracked (not part of this release):
+**All release blockers resolved as of 2026-06-04.**
 
-- Wait for the Umbrel team to merge upstream PR #5717. Linter is green, the only open item is
-  reviewer approval. Personal store continues to serve the v1.2.1 build in the meantime.
-- Optional: replace the current OCI-index-digest pin with per-arch sha pins once Umbrel's review
-  tooling signals it's preferred.
+PR #5717 status: lint clean (0 errors, 0 warnings, 0 infos), `MERGEABLE`. Only step remaining is
+Umbrel team review. The personal Umbrel App Store at `earlvanze/umbrel-personal-apps` (commit
+`0ef1bde`) continues to serve the v1.2.1 build on the host, and the live canary container is now
+running as non-root `uid 1000` with full OAuth + remote-delta pipeline validated.
+
+End-to-end validation performed on the live canary at 2026-06-04 02:53:
+
+1. `POST /2/files/upload` to `/Obsidian/Operations/e2e-validation-*.md` via Dropbox API
+2. `touch` in the local sync root triggered a debounced watch cycle
+3. Daemon `remote.delta` event recorded `entries=1, applied_files=1`
+4. `local_files` advanced from 172 → 174 (test upload + touched probe file)
+5. `/status` JSON returned `ok=true`, `conflicts=0`, `pending_ops=0`
+6. Dashboard continues to render Dashboard / Files / Settings / Conflicts tabs
+7. `auth status` returns `earlvanze@gmail.com` with `files.content.read/write` scope and a
+   valid refresh token (expires 2026-06-04 03:14:53Z)
+
+**Status: ready for production.**
 
 
 Umbrel App Store submission (2026-06-04):
