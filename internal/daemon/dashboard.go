@@ -89,7 +89,7 @@ tr:hover td{background:#f4f4f5}
 <body>
 <div class="app">
 <aside class="sidebar">
-<div class="brand"><svg viewBox="0 0 24 24"><path d="M12 2L2 9l10 7 10-7-10-7zM2 15l10 7 10-7M2 18l10 7 10-7"/></svg>
+<div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2" fill="currentColor" fill-opacity="0.15"/><path d="M3 9h18"/><path d="M8 14l-2 2 2 2M16 18l2-2-2-2M6 16h12"/></svg>
 Dropbox</div>
 <nav>
 <a href="/dashboard" data-tab="dashboard" class="active">Dashboard</a>

@@ -242,7 +242,7 @@ const setupHTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Setup - Dropbox Client</title>
+<title>Setup - Dropbox</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;line-height:1.5;color:#18181b}
@@ -271,7 +271,7 @@ input[type=text]{width:100%;padding:.5rem;border:1px solid #d4d4d8;border-radius
 </style>
 </head>
 <body>
-<h1>Dropbox Client Setup</h1>
+<h1>Dropbox Setup</h1>
 <p class="muted">Complete these steps to start syncing your Dropbox.</p>
 
 <div class="step active" id="step1">

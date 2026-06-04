@@ -249,6 +249,40 @@ func TestAPIRoutesExposeConflictsListAndResolve(t *testing.T) {
 	}
 }
 
+func TestDashboardBrandLogoMatchesNewIconFamily(t *testing.T) {
+	s := testStore(t)
+	if err := s.SetConfig("root", "/tmp/root"); err != nil {
+		t.Fatal(err)
+	}
+	tokDir := t.TempDir()
+	tokPath := filepath.Join(tokDir, "token.json")
+	tok := auth.Token{AccessToken: "test-access", RefreshToken: "test-refresh", TokenType: "bearer", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := auth.SaveToken(tokPath, tok); err != nil {
+		t.Fatal(err)
+	}
+	d := New(config.Config{Root: "/tmp/root", DryRun: true, TokenFile: tokPath}, s, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	d.HealthHandler().ServeHTTP(rr, req)
+	body := rr.Body.String()
+	if !strings.Contains(body, fmt.Sprintf("%cdiv class=\"brand\"%c", 60, 62)) {
+		t.Fatalf("missing .brand block: %s", body)
+	}
+	// The v1.2.3 placeholder logo (stacked diamonds) must be gone.
+	if strings.Contains(body, "M12 2L2 9l10 7 10-7-10-7z") {
+		t.Fatalf("dashboard still contains the old stacked-diamond placeholder logo")
+	}
+	// The new folder+sync-arrows logo must be present.
+	if !strings.Contains(body, "rect") || !strings.Contains(body, "M8 14l-2 2 2 2M16 18l2-2-2-2") {
+		t.Fatalf("dashboard sidebar logo missing the new folder+sync-arrows mark")
+	}
+	// Brand text must not contain the legacy "Client" suffix.
+	if strings.Contains(body, "Dropbox Client") {
+		t.Fatalf("dashboard brand text still says 'Dropbox Client'")
+	}
+}
+
 func TestAPIRoutesExposeStatusAndEvents(t *testing.T) {
 	s := testStore(t)
 	if err := s.SetConfig("root", "/tmp/root"); err != nil {

@@ -40,7 +40,7 @@ func (d *Daemon) serveFilesHTML(w http.ResponseWriter, r *http.Request) {
 	}
 	crumbs := d.breadcrumbs(clean)
 	var b strings.Builder
-	b.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Umbrel Dropbox Client - Files</title>`)
+	b.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dropbox - Files</title>`)
 	b.WriteString(`<style>body{font-family:sans-serif;max-width:900px;margin:1em auto;padding:0 1em}a{color:#0a66c2;text-decoration:none}a:hover{text-decoration:underline}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.4em .6em;border-bottom:1px solid #eee}tr.dir td:first-child::before{content:"📁 "}tr.file td:first-child::before{content:"📄 "}.crumbs{margin:.5em 0 1em}</style>`)
 	b.WriteString(`</head><body>`)
 	b.WriteString(`<h1>Files</h1><div class="crumbs">`)
