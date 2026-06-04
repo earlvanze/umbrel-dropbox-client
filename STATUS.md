@@ -125,6 +125,24 @@ Validation (2026-06-04, fresh 158k-file soak against `/home/umbrel/Dropbox`):
 
 **All release blockers resolved as of 2026-06-04.**
 
+v1.2.2 (2026-06-04):
+
+- **Conflict dashboard 404 fix**: `GET /api/conflicts` and `POST /api/conflicts/resolve` were
+  never registered in the `HealthHandler` switch even though their handlers (`serveAPIConflicts`,
+  `serveResolveConflict`) already existed. The dashboard's `loadConflicts()` and
+  `resolveConflict()` JS therefore hit a 404 when users opened the Conflicts tab. v1.2.2 wires
+  both routes into the router (POST on `/api/conflicts` is treated as the resolve call to match
+  the legacy client; `/api/conflicts/resolve` is POST-only and returns 405 on GET).
+- Multi-arch Docker image rebuilt and pushed to `ghcr.io/earlvanze/umbrel-dropbox-client:v1.2.2`
+  and `:latest` (linux/amd64 + linux/arm64). Image digest
+  `sha256:f8d5cfdc633bed6c0f508349fdf8cc5fad2c245836a5f406f6f4dd8618aba507`.
+- `umbrel-app/umbrel-app.yml` bumped to `1.2.2` with release notes describing the conflict
+  routes fix.
+- `umbrel-app/docker-compose.yml` pinned to `:v1.2.2` at the new OCI digest.
+- New test `TestAPIRoutesExposeConflictsListAndResolve` covers the list, resolve, and
+  method-not-allowed paths.
+
+
 PR #5717 status: lint clean (0 errors, 0 warnings, 0 infos), `MERGEABLE`. Only step remaining is
 Umbrel team review. The personal Umbrel App Store at `earlvanze/umbrel-personal-apps` (commit
 `0ef1bde`) continues to serve the v1.2.1 build on the host, and the live canary container is now

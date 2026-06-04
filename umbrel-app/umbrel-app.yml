@@ -4,7 +4,7 @@ name: Dropbox Client
 tagline: Safe, scoped Dropbox sync for Umbrel with dry-run defaults
 icon: https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-client/master/data/icons/icon.svg
 category: files
-version: "1.2.1"
+version: "1.2.2"
 description: >-
   A Linux-first Dropbox sync daemon for Umbrel. Keeps your Dropbox files in sync
   with a local folder, with a built-in web dashboard for status, conflicts, and
@@ -25,7 +25,9 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >-
-  CPU and idle-cost fixes. v1.2.1 ships the watch-debounce path repairs that
+  Conflict dashboard routes fix. v1.2.2 wires /api/conflicts and /api/conflicts/resolve
+  into the HealthHandler switch (they were previously returning 404 from the
+  dashboard's Conflicts tab). v1.2.1's watch-debounce path repairs that
   make incremental scans actually fire on large trees: a root-only change now
   scans only the root directory, the dirty-dir split keeps single-segment
   subdirs from collapsing to the empty root, and missing-file detection is
