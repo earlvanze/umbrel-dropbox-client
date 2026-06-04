@@ -62,8 +62,9 @@ func TestUmbrelAppPackagingStartsDryRunDaemon(t *testing.T) {
 	}
 	entrypoint := readFile(t, filepath.Join(repo, "packaging/docker/umbrel-entrypoint.sh"))
 	for _, want := range []string{
-		"UDC_ROOT:-/dropbox/Obsidian",
-		"UDC_REMOTE_PATH:-/Obsidian",
+		"UDC_ROOT:-/dropbox",
+		"UDC_REMOTE_PATH:-/",
+		"UDC_LIVE_SCOPE:-/",
 		"live mode requires UDC_ALLOW_LIVE=true",
 		"umbrel-dropbox-client init --root \"$ROOT\" --db \"$DB\"",
 		"exec umbrel-dropbox-clientd --config \"$CONFIG\"",

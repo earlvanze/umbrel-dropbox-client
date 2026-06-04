@@ -2,9 +2,9 @@
 set -eu
 
 CONFIG="${UDC_CONFIG:-${UDS_CONFIG:-/data/config.json}}"
-ROOT="${UDC_ROOT:-/dropbox/Obsidian}"
+ROOT="${UDC_ROOT:-/dropbox}"
 DB="${UDC_DB:-/data/state.db}"
-REMOTE_PATH="${UDC_REMOTE_PATH:-/Obsidian}"
+REMOTE_PATH="${UDC_REMOTE_PATH:-/}"
 TOKEN_FILE="${UDC_TOKEN_FILE:-/data/token.json}"
 REMOTE_DELTA="${UDC_REMOTE_DELTA:-auto}"
 WATCH="${UDC_WATCH:-true}"
@@ -13,7 +13,7 @@ SCAN_INTERVAL_SECONDS="${UDC_SCAN_INTERVAL_SECONDS:-300}"
 DRY_RUN="${UDC_DRY_RUN:-true}"
 HEALTH_ADDR="${UDC_HEALTH_ADDR:-0.0.0.0:8477}"
 ALLOW_LIVE="${UDC_ALLOW_LIVE:-false}"
-LIVE_SCOPE="${UDC_LIVE_SCOPE:-/Obsidian}"
+LIVE_SCOPE="${UDC_LIVE_SCOPE:-/}"
 
 if [ "$DRY_RUN" != "true" ]; then
   if [ "$DRY_RUN" != "false" ] || [ "$ALLOW_LIVE" != "true" ]; then
