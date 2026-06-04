@@ -129,6 +129,16 @@ Followups still tracked (not part of this release):
   workflow. Personal store is already serving the v1.2.1 build.
 - Optional: pin the compose image to a per-arch sha for stricter supply-chain reproducibility.
 
+
+Umbrel App Store submission (2026-06-04):
+
+- **PR #5717** opened against `getumbrel/umbrel-apps`: https://github.com/getumbrel/umbrel-apps/pull/5717
+  - Submits `umbrel-dropbox-client` v1.2.1 for the official Umbrel App Store.
+  - Manifest `1` (matches upstream convention), `category: files`, `port: 8477`, no dependencies.
+  - Docker image: `ghcr.io/earlvanze/umbrel-dropbox-client:v1.2.1` (multi-arch: linux/amd64 + linux/arm64).
+  - Local verification on this Umbrel install: `umbrel-dropbox-client_server_1` running the v1.2.1
+    image, dashboard responding on `:8477`, dry-run by default with `UDC_LIVE_SCOPE=/Obsidian`.
+
 ## ACFS integration
 
 Status: ACFS integration milestone complete.
