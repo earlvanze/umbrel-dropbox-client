@@ -98,6 +98,37 @@ Followups still tracked (not part of this resolution):
 
 - Multi-arch Umbrel App Store image build and submission to the Umbrel community app store.
 
+
+v1.2.1 release (2026-06-04):
+
+- Multi-arch Docker image built and pushed to `ghcr.io/earlvanze/umbrel-dropbox-client:v1.2.1` and `:latest`
+  (linux/amd64 + linux/arm64). Verified locally with a `/dropbox/Obsidian` canary container: scoped dry-run
+  mode active by default, dashboard redirects to `/setup`, `/api/files`, `/status`, `/healthz` all respond
+  JSON 200, and the setup wizard page renders.
+- `umbrel-app/umbrel-app.yml` bumped to `1.2.1` with rewritten release notes describing the CPU fixes.
+- `umbrel-app/docker-compose.yml` now points at `:v1.2.1`, scopes `UDC_ROOT` to `/dropbox/Obsidian`
+  (instead of the entire Dropbox root), and adds `UDC_REMOTE_PATH=/Obsidian` and `UDC_LIVE_SCOPE=/Obsidian`
+  so the entrypoint's live-mode guard is satisfied out of the box.
+- The Personal Umbrel App Store repo `earlvanze/umbrel-personal-apps` was updated to mirror the v1.2.1
+  manifest and compose (`commit f7f9cf8`).
+- The host's live Umbrel app container (`umbrel-dropbox-client_server_1`) is running on the new image,
+  172 entries in `/dropbox/Obsidian`, both full and incremental cycles observed in the events log.
+
+Validation (2026-06-04, fresh 158k-file soak against `/home/umbrel/Dropbox`):
+
+- Initial full scan: ~12 min for 158,357 files (cold cache; previously ~3:30 once warm).
+- Three controlled touch tests (subdir, root, deep): all three new paths appear in the entries table
+  after a single incremental cycle. No `local_missing` tombstones for our test files.
+- The 1:35 incremental cycle scanned only 120,579 files (the dirty `Projects/umbrel-dropbox-client/`
+  subtree), not the full root — confirming the watch-debounce path is now scope-bounded.
+- Mode is correctly reported as `incremental` (never silently falling back to `full` after a single touch).
+
+Followups still tracked (not part of this release):
+
+- Submit a PR to the upstream `getumbrel/umbrel-apps` community app store per Umbrel's submission
+  workflow. Personal store is already serving the v1.2.1 build.
+- Optional: pin the compose image to a per-arch sha for stricter supply-chain reproducibility.
+
 ## ACFS integration
 
 Status: ACFS integration milestone complete.

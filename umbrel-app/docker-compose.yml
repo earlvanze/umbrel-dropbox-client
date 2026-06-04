@@ -7,7 +7,7 @@ services:
       APP_PORT: 8477
 
   server:
-    image: ghcr.io/earlvanze/umbrel-dropbox-client@sha256:98223cc7adcb0a0a36b6f296c6c57ef1d2d360046f0369911f8731718714478f
+    image: ghcr.io/earlvanze/umbrel-dropbox-client:v1.2.1
     restart: unless-stopped
     volumes:
       - /data:/data
@@ -15,9 +15,11 @@ services:
     environment:
       - UDC_CONFIG=/data/config.json
       - UDC_DB=/data/state.db
-      - UDC_ROOT=/dropbox
+      - UDC_ROOT=/dropbox/Obsidian
+      - UDC_REMOTE_PATH=/Obsidian
       - UDC_TOKEN_FILE=/data/token.json
       - UDC_REMOTE_DELTA=auto
+      - UDC_LIVE_SCOPE=/Obsidian
       - UDC_DRY_RUN=true
       - UDC_ALLOW_LIVE=false
       - UDC_WATCH=true
