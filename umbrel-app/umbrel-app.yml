@@ -4,7 +4,7 @@ name: Dropbox
 tagline: Safe, scoped Dropbox sync for Umbrel with dry-run defaults
 icon: https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-client/master/data/icons/icon.svg
 category: files
-version: "1.2.5"
+version: "1.2.6"
 description: >-
   A Linux-first Dropbox sync daemon for Umbrel. Keeps your Dropbox files in sync
   with a local folder, with a built-in web dashboard for status, conflicts, and
@@ -28,12 +28,15 @@ releaseNotes: >-
   Trademark notice: Dropbox is a trademark of Dropbox, Inc. This app is not
   affiliated with, endorsed by, or sponsored by Dropbox, Inc. Use of the
   Dropbox name is for identification and interoperability purposes only.
-  v1.2.5 drops the legacy "Client" suffix from the dashboard title, the
-  setup page, and the /files fallback page, and aligns the sidebar brand
-  logo with the v1.2.3 app icon. v1.2.4 (carried forward) adds an
-  in-process restart, registers /api/status and /api/events (they were
-  404'ing from the dashboard), and prompts the user to restart when
-  settings that affect the watcher or live mode are saved.
+  v1.2.6 removes the /Obsidian defaults from the entrypoint and compose
+  files. A fresh install now syncs the user's entire Dropbox with
+  UDC_ROOT=/dropbox, UDC_REMOTE_PATH=/, and UDC_LIVE_SCOPE=/. v1.2.5
+  (carried forward) drops the legacy "Client" suffix from the dashboard
+  title, the setup page, and the /files fallback page, and aligns the
+  sidebar brand logo with the v1.2.3 app icon. v1.2.4 adds an in-process
+  restart, registers /api/status and /api/events (they were 404'ing from
+  the dashboard), and prompts the user to restart when settings that
+  affect the watcher or live mode are saved.
 dependencies: []
 submitter: Earl Co
 submission: https://github.com/earlvanze/umbrel-dropbox-client
