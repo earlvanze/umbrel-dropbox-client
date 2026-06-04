@@ -2,7 +2,7 @@
 
 Linux-first Dropbox sync daemon for Umbrel and general Linux desktops.
 
-This is intended to become a proper sync client, not a thin wrapper around the official Linux Dropbox daemon.
+This is a proper bidirectional sync client built on the published Dropbox HTTP API, not a thin wrapper around the official Linux Dropbox daemon.
 
 ## Trademark notice
 
@@ -23,15 +23,28 @@ This is intended to become a proper sync client, not a thin wrapper around the o
 
 ## Current status
 
-MVP scaffold:
+Production-ready (v1.2.5).
 
-- Go CLI and daemon compile.
-- SQLite schema exists.
-- Dropbox content-hash implementation exists.
-- Dropbox account API client stub exists.
-- systemd, Docker, Umbrel app, GoReleaser, and desktop integration scaffolds exist.
+- Bidirectional Dropbox sync via the published HTTP API (OAuth2 PKCE, refresh tokens, device-code fallback).
+- Durable SQLite state store with cursor-based remote delta ingestion.
+- Linux inotify + periodic scanner for local changes, with single-segment dirty-prefix scoping.
+- Multithreaded upload/download workers with retry/backoff and conservative conflict handling.
+- Built-in web dashboard on `:8477` (status, files, settings, conflicts, in-process restart, save prompt).
+- Umbrel App Store packaging, multi-arch Docker image, `.deb` / APT repository distribution.
+- Live transfer is opt-in (`allow_live=true` + explicit live scope); dry-run is the default.
 
-Not production sync-ready yet.
+Trademark: Dropbox is a trademark of Dropbox, Inc. This app is an independent community project
+and is not affiliated with, endorsed by, or sponsored by Dropbox, Inc. See the
+[trademark notice](#trademark-notice) above.
+
+## Features
+
+- Drop-in Umbrel app with a single-page web dashboard (Dashboard / Files / Settings / Conflicts tabs).
+- OAuth2 PKCE + device-code auth flows, refresh-token rotation, redacted auth status.
+- Per-folder sync scoping (`sync_paths`) and per-folder exclude lists, with a save button that prompts for an in-process restart.
+- Conflict detection with explicit local/remote resolution, and a Conflicts page that streams `/api/conflicts` JSON.
+- Health endpoints: `/healthz`, `/api/status`, `/api/events`, `/api/config`, `/api/restart`, `/api/conflicts` (and `/api/conflicts/resolve`).
+- Multi-arch container image (`linux/amd64` + `linux/arm64`) pinned by OCI digest in every compose file.
 
 ## Build
 
