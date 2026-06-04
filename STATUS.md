@@ -125,9 +125,10 @@ Validation (2026-06-04, fresh 158k-file soak against `/home/umbrel/Dropbox`):
 
 Followups still tracked (not part of this release):
 
-- Submit a PR to the upstream `getumbrel/umbrel-apps` community app store per Umbrel's submission
-  workflow. Personal store is already serving the v1.2.1 build.
-- Optional: pin the compose image to a per-arch sha for stricter supply-chain reproducibility.
+- Wait for the Umbrel team to merge upstream PR #5717. Linter is green, the only open item is
+  reviewer approval. Personal store continues to serve the v1.2.1 build in the meantime.
+- Optional: replace the current OCI-index-digest pin with per-arch sha pins once Umbrel's review
+  tooling signals it's preferred.
 
 
 Umbrel App Store submission (2026-06-04):
