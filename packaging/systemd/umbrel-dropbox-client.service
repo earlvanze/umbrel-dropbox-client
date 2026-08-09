@@ -1,5 +1,5 @@
 [Unit]
-Description=Umbrel Dropbox Client daemon
+Description=SyncNest daemon
 After=network-online.target
 Wants=network-online.target
 

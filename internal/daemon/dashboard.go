@@ -16,7 +16,7 @@ const dashboardHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dropbox — Dashboard</title>
+<title>SyncNest — Dashboard</title>
 <style>
 :root{--primary:#0061ff;--primary-dark:#0050d8;--bg:#f8f9fb;--card:#fff;--text:#18181b;--muted:#71717a;--border:#e4e4e7;--danger:#dc2626;--success:#16a34a;--warning:#ca8a04;--radius:.5rem;--shadow:0 1px 3px rgba(0,0,0,.08)}
 *{box-sizing:border-box}
@@ -90,7 +90,7 @@ tr:hover td{background:#f4f4f5}
 <div class="app">
 <aside class="sidebar">
 <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2" fill="currentColor" fill-opacity="0.15"/><path d="M3 9h18"/><path d="M8 14l-2 2 2 2M16 18l2-2-2-2M6 16h12"/></svg>
-Dropbox</div>
+SyncNest</div>
 <nav>
 <a href="/dashboard" data-tab="dashboard" class="active">Dashboard</a>
 <a href="#" data-tab="files">Files</a>

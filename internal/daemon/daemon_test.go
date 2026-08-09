@@ -181,7 +181,7 @@ func TestDashboardHandlerReturnsHTMLAndConflictsJSON(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "Dropbox — Dashboard") {
+	if !strings.Contains(rr.Body.String(), "SyncNest — Dashboard") {
 		t.Fatalf("body missing title: %s", rr.Body.String())
 	}
 
@@ -277,9 +277,8 @@ func TestDashboardBrandLogoMatchesNewIconFamily(t *testing.T) {
 	if !strings.Contains(body, "rect") || !strings.Contains(body, "M8 14l-2 2 2 2M16 18l2-2-2-2") {
 		t.Fatalf("dashboard sidebar logo missing the new folder+sync-arrows mark")
 	}
-	// Brand text must not contain the legacy "Client" suffix.
-	if strings.Contains(body, "Dropbox Client") {
-		t.Fatalf("dashboard brand text still says 'Dropbox Client'")
+	if !strings.Contains(body, "SyncNest") {
+		t.Fatalf("dashboard brand text is missing SyncNest")
 	}
 }
 
@@ -428,7 +427,7 @@ func TestDashboardRouteAliasReturnsDashboardHTML(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("%s code=%d body=%s", p, rr.Code, rr.Body.String())
 		}
-		if !strings.Contains(rr.Body.String(), "Dropbox — Dashboard") {
+		if !strings.Contains(rr.Body.String(), "SyncNest — Dashboard") {
 			t.Fatalf("%s title missing in body: %s", p, rr.Body.String())
 		}
 		if strings.Contains(rr.Body.String(), "Dropbox Client") {

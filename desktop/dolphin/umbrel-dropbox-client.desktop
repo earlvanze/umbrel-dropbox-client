@@ -6,11 +6,11 @@ Actions=SyncNow;CopyDropboxLink;
 X-KDE-Priority=TopLevel
 
 [Desktop Action SyncNow]
-Name=Dropbox Client: Sync now
+Name=SyncNest: Sync now
 Icon=folder-sync
 Exec=umbrel-dropbox-client sync --once --path %F
 
 [Desktop Action CopyDropboxLink]
-Name=Dropbox Client: Copy link
+Name=SyncNest: Copy link
 Icon=edit-copy
 Exec=umbrel-dropbox-client share-link --copy %F

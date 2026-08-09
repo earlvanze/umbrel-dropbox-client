@@ -1,12 +1,11 @@
 manifestVersion: 1.1
-id: umbrel-dropbox-client
-name: Dropbox
-tagline: Safe, scoped Dropbox sync for Umbrel with dry-run defaults
-icon: https://raw.githubusercontent.com/earlvanze/umbrel-dropbox-client/master/data/icons/icon.svg
+id: syncnest
+name: SyncNest
+tagline: Safe, scoped file sync for Dropbox with dry-run defaults
 category: files
-version: "1.2.6"
+version: "1.2.7"
 description: >-
-  A Linux-first Dropbox sync daemon for Umbrel. Keeps your Dropbox files in sync
+  SyncNest is a Linux-first Dropbox sync daemon for Umbrel. It keeps Dropbox files in sync
   with a local folder, with a built-in web dashboard for status, conflicts, and
   health checks. Features a rich single-page dashboard with file manager
   (upload, download, delete, create folders), settings configuration, sync
@@ -25,6 +24,9 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >-
+  v1.2.7 introduces the standalone SyncNest app identity and stores app state
+  and synchronized files under Umbrel-managed app data paths. The dashboard,
+  setup wizard, desktop integrations, and package labels now use SyncNest.
   Trademark notice: Dropbox is a trademark of Dropbox, Inc. This app is not
   affiliated with, endorsed by, or sponsored by Dropbox, Inc. Use of the
   Dropbox name is for identification and interoperability purposes only.

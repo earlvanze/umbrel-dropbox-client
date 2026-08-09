@@ -242,7 +242,7 @@ const setupHTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Setup - Dropbox</title>
+<title>Setup - SyncNest</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;line-height:1.5;color:#18181b}
@@ -271,7 +271,7 @@ input[type=text]{width:100%;padding:.5rem;border:1px solid #d4d4d8;border-radius
 </style>
 </head>
 <body>
-<h1>Dropbox Setup</h1>
+<h1>SyncNest Setup</h1>
 <p class="muted">Complete these steps to start syncing your Dropbox.</p>
 
 <div class="step active" id="step1">
@@ -289,7 +289,7 @@ input[type=text]{width:100%;padding:.5rem;border:1px solid #d4d4d8;border-radius
     <h3>Step 2: Local Folder</h3>
     <p>Choose where synced files will be stored on this device.</p>
     <label>Local folder path</label><br>
-    <input type="text" id="root-input" value="/home/umbrel/Dropbox" placeholder="/home/umbrel/Dropbox">
+    <input type="text" id="root-input" value="/dropbox" placeholder="/dropbox">
     <p class="muted">This folder will be created if it does not exist.</p>
     <div style="margin-top:1rem">
       <button class="btn" onclick="saveRoot()">Continue</button>

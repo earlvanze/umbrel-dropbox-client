@@ -3,16 +3,16 @@ version: "3.7"
 services:
   app_proxy:
     environment:
-      APP_HOST: umbrel-dropbox-client_server_1
+      APP_HOST: syncnest_server_1
       APP_PORT: 8477
 
   server:
-    image: ghcr.io/earlvanze/umbrel-dropbox-client:v1.2.6@sha256:7724254b749c22644adf133b5ef109729710bab921ee40bbc572f249630ca34c
+    image: ghcr.io/earlvanze/umbrel-dropbox-client:v1.2.7
     restart: on-failure
     user: "1000:1000"
     volumes:
-      - /data:/data
-      - /home/umbrel/Dropbox:/dropbox
+      - ${APP_DATA_DIR}/data/app:/data
+      - ${APP_DATA_DIR}/data/sync:/dropbox
     environment:
       - UDC_CONFIG=/data/config.json
       - UDC_DB=/data/state.db
@@ -26,4 +26,4 @@ services:
       - UDC_WATCH=true
       - UDC_SCAN_INTERVAL_SECONDS=300
       - UDC_HEALTH_ADDR=0.0.0.0:8477
-    container_name: umbrel-dropbox-client_server_1
+    container_name: syncnest_server_1

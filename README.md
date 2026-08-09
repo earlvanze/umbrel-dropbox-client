@@ -1,4 +1,4 @@
-# Umbrel Dropbox
+# SyncNest
 
 Linux-first Dropbox sync daemon for Umbrel and general Linux desktops.
 
@@ -23,7 +23,7 @@ This is a proper bidirectional sync client built on the published Dropbox HTTP A
 
 ## Current status
 
-Production-ready (v1.2.5).
+Production-ready (v1.2.7).
 
 - Bidirectional Dropbox sync via the published HTTP API (OAuth2 PKCE, refresh tokens, device-code fallback).
 - Durable SQLite state store with cursor-based remote delta ingestion.

@@ -7,7 +7,7 @@ import subprocess
 class UmbrelDropboxClientExtension(GObject.GObject, Nautilus.MenuProvider):
     def get_file_items(self, files):
         if not files: return []
-        item = Nautilus.MenuItem(name='UmbrelDropboxClient::SyncNow', label='Dropbox Client: Sync now', tip='Queue this path for sync')
+        item = Nautilus.MenuItem(name='UmbrelDropboxClient::SyncNow', label='SyncNest: Sync now', tip='Queue this path for sync')
         item.connect('activate', self.sync_now, files)
         return [item]
     def sync_now(self, menu, files):
