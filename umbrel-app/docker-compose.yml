@@ -7,7 +7,7 @@ services:
       APP_PORT: 8477
 
   server:
-    image: ghcr.io/earlvanze/umbrel-dropbox-client:v1.2.7
+    image: ghcr.io/earlvanze/umbrel-dropbox-client:v1.2.7@sha256:efe3949fcdbbdbec8d21ff57e477e21918e3ad6e47f2b01c8e7aa81276acd748
     restart: on-failure
     user: "1000:1000"
     volumes:
@@ -26,4 +26,3 @@ services:
       - UDC_WATCH=true
       - UDC_SCAN_INTERVAL_SECONDS=300
       - UDC_HEALTH_ADDR=0.0.0.0:8477
-    container_name: syncnest_server_1
