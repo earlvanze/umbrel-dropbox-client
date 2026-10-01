@@ -17,6 +17,7 @@ import (
 	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
 )
 
@@ -44,6 +45,182 @@ func TestRunCycleScansLocalFilesAndProcessesDryRunQueue(t *testing.T) {
 	}
 	if st.Entries != 1 || st.PendingOps != 0 || st.LastEvent == "" {
 		t.Fatalf("status=%#v", st)
+	}
+}
+
+func TestWatchedUploadsOnlyNewOrRevisionTrackedChanges(t *testing.T) {
+	root := t.TempDir()
+	s := testStore(t)
+	d := New(config.Config{Root: root, DryRun: true}, s, nil)
+	files := []scan.File{
+		{Path: "/new.txt", AbsPath: filepath.Join(root, "new.txt"), ContentHash: "new"},
+		{Path: "/tracked.txt", AbsPath: filepath.Join(root, "tracked.txt"), ContentHash: "changed"},
+		{Path: "/legacy.txt", AbsPath: filepath.Join(root, "legacy.txt"), ContentHash: "changed"},
+		{Path: "/neighbor.txt", AbsPath: filepath.Join(root, "neighbor.txt"), ContentHash: "new"},
+	}
+	prior := map[string]*state.Entry{
+		"/new.txt":     nil,
+		"/tracked.txt": {Path: "/tracked.txt", ContentHash: "old", Rev: "rev1", State: "clean"},
+		"/legacy.txt":  {Path: "/legacy.txt", ContentHash: "old", State: "local_scanned"},
+	}
+	queued, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil)
+	if err != nil || queued != 2 {
+		t.Fatalf("queued=%d err=%v", queued, err)
+	}
+	first, err := s.NextPendingOp()
+	if err != nil || first == nil || first.Path != "/new.txt" {
+		t.Fatalf("first=%#v err=%v", first, err)
+	}
+	if !strings.Contains(first.Payload, `"remote_path":"/new.txt"`) {
+		t.Fatalf("payload=%s", first.Payload)
+	}
+	tracked, err := s.PendingOpByID(first.ID + 1)
+	if err != nil || tracked == nil || tracked.Path != "/tracked.txt" || !strings.Contains(tracked.Payload, `"rev":"rev1"`) {
+		t.Fatalf("tracked=%#v err=%v", tracked, err)
+	}
+}
+
+func TestWatchedUploadsSkipRemoteDeltaAndNoWatch(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir()}, s, nil)
+	files := []scan.File{{Path: "/old.txt", ContentHash: "new"}}
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, nil, nil); err != nil || n != 0 {
+		t.Fatalf("full scan queued=%d err=%v", n, err)
+	}
+	prior := map[string]*state.Entry{"/old.txt": {Path: "/old.txt", ContentHash: "old", Rev: "rev1", State: "clean"}}
+	remote := []dropbox.Metadata{{Tag: "deleted", PathLower: "/old.txt"}}
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, remote); err != nil || n != 0 {
+		t.Fatalf("remote rename/deletion queued=%d err=%v", n, err)
+	}
+	prior["/old.txt"].State = "remote_scanned"
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 0 {
+		t.Fatalf("remote changed queued=%d err=%v", n, err)
+	}
+}
+
+type fakeExactMetadataClient struct{ meta *dropbox.Metadata }
+
+func (f fakeExactMetadataClient) GetMetadata(_ context.Context, _ string) (*dropbox.Metadata, error) {
+	return f.meta, nil
+}
+
+func TestWatchedUploadRefreshesExactMissingRevision(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), DryRun: true}, s, nil)
+	d.metadataClient = fakeExactMetadataClient{meta: &dropbox.Metadata{Tag: "file", PathLower: "/ledger.csv", Rev: "r9", ContentHash: "old"}}
+	files := []scan.File{{Path: "/ledger.csv", ContentHash: "new"}}
+	prior := map[string]*state.Entry{"/ledger.csv": {Path: "/ledger.csv", ContentHash: "old", State: "local_scanned"}}
+	n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil)
+	if err != nil || n != 1 {
+		t.Fatalf("queued=%d err=%v", n, err)
+	}
+	op, err := s.NextPendingOp()
+	if err != nil || op == nil || !strings.Contains(op.Payload, `"rev":"r9"`) {
+		t.Fatalf("op=%#v err=%v", op, err)
+	}
+	// A remote edit since the last local scan must never be overwritten.
+	if err := s.CompleteOp(op.ID); err != nil {
+		t.Fatal(err)
+	}
+	d.metadataClient = fakeExactMetadataClient{meta: &dropbox.Metadata{Tag: "file", Rev: "r10", ContentHash: "someone-else-edited"}}
+	n, err = d.enqueueWatchedUploads(context.Background(), files, prior, nil)
+	if err != nil || n != 0 {
+		t.Fatalf("conflicting remote queued=%d err=%v", n, err)
+	}
+}
+
+func TestRemoteChangeRecordsConflictAndBlocksWatchedUpload(t *testing.T) {
+	root := t.TempDir()
+	localPath := filepath.Join(root, "file.txt")
+	if err := os.WriteFile(localPath, []byte("local"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := testStore(t)
+	d := New(config.Config{Root: root, DryRun: true}, s, nil)
+	remote := []dropbox.Metadata{{Tag: "file", PathLower: "/file.txt", Rev: "remote-r2", ContentHash: "different"}}
+	queued, err := d.enqueueRemoteDownloads(nil, remote)
+	if err != nil || queued != 0 {
+		t.Fatalf("queued=%d err=%v", queued, err)
+	}
+	blocked, err := s.HasConflict("/file.txt")
+	if err != nil || !blocked {
+		t.Fatalf("blocked=%v err=%v", blocked, err)
+	}
+	files := []scan.File{{Path: "/file.txt", AbsPath: localPath, ContentHash: "new-local"}}
+	prior := map[string]*state.Entry{"/file.txt": {Path: "/file.txt", ContentHash: "old-local", Rev: "remote-r2", State: "clean"}}
+	queued, err = d.enqueueWatchedUploads(context.Background(), files, prior, nil)
+	if err != nil || queued != 0 {
+		t.Fatalf("upload queued=%d err=%v", queued, err)
+	}
+}
+
+func TestRemoteDownloadsRespectScope(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), DryRun: true, SyncPaths: []string{"/allowed"}}, s, nil)
+	remote := []dropbox.Metadata{{Tag: "file", PathLower: "/excluded/file.txt", ContentHash: "hash"}}
+	queued, err := d.enqueueRemoteDownloads(nil, remote)
+	if err != nil || queued != 0 {
+		t.Fatalf("queued=%d err=%v", queued, err)
+	}
+}
+
+func TestWatchedUploadRefreshesPendingPayload(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), DryRun: true}, s, nil)
+	prior := map[string]*state.Entry{"/file.txt": {Path: "/file.txt", ContentHash: "old", Rev: "r1", State: "clean"}}
+	files := []scan.File{{Path: "/file.txt", ContentHash: "first"}}
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 1 {
+		t.Fatalf("first queued=%d err=%v", n, err)
+	}
+	op, err := s.NextPendingOp()
+	if err != nil || op == nil {
+		t.Fatalf("op=%#v err=%v", op, err)
+	}
+	prior["/file.txt"].ContentHash = "first"
+	files[0].ContentHash = "second"
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 0 {
+		t.Fatalf("second queued=%d err=%v", n, err)
+	}
+	updated, err := s.PendingOpByID(op.ID)
+	if err != nil || updated == nil || !strings.Contains(updated.Payload, `"content_hash":"second"`) {
+		t.Fatalf("updated=%#v err=%v", updated, err)
+	}
+}
+
+func TestWatchedUploadPreservesRemoteDisplayCase(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), RemotePath: "/Real Estate", DryRun: true}, s, nil)
+	files := []scan.File{{Path: "/Sale/Closing.PDF", ContentHash: "new"}}
+	prior := map[string]*state.Entry{"/sale/closing.pdf": nil}
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 1 {
+		t.Fatalf("queued=%d err=%v", n, err)
+	}
+	op, err := s.NextPendingOp()
+	if err != nil || op == nil || !strings.Contains(op.Payload, `"remote_path":"/Real Estate/Sale/Closing.PDF"`) {
+		t.Fatalf("op=%#v err=%v", op, err)
+	}
+}
+
+func TestRunCycleQueuesOnlyExactWatchedNewFile(t *testing.T) {
+	root := t.TempDir()
+	neighbor := filepath.Join(root, "neighbor.txt")
+	if err := os.WriteFile(neighbor, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := testStore(t)
+	d := New(config.Config{Root: root, DryRun: true, Watch: true, UploadWorkers: 1}, s, nil)
+	initial, err := d.RunCycle(context.Background())
+	if err != nil || initial.LocalUploadsQueued != 0 {
+		t.Fatalf("initial=%#v err=%v", initial, err)
+	}
+	newFile := filepath.Join(root, "new.txt")
+	if err := os.WriteFile(newFile, []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	d.dirty.Add(newFile)
+	stats, err := d.RunCycleIncremental(context.Background(), true)
+	if err != nil || stats.LocalUploadsQueued != 1 || stats.WorkerCompleted != 1 {
+		t.Fatalf("stats=%#v err=%v", stats, err)
 	}
 }
 
@@ -495,7 +672,7 @@ func TestRunCycleIngestsRemoteDeltaWhenConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.RemoteEntries != 1 || stats.RemoteAppliedFiles != 1 || stats.RemotePages != 1 || stats.LocalFiles != 1 {
+	if stats.RemoteEntries != 1 || stats.RemoteAppliedFiles != 1 || stats.RemotePages != 1 || stats.RemoteDownloadsQueued != 1 || stats.WorkerCompleted != 1 || stats.LocalFiles != 1 {
 		t.Fatalf("stats=%#v", stats)
 	}
 	cursor, err := s.GetConfig(state.DropboxCursorKeyForPath(""))

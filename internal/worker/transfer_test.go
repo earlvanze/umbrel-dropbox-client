@@ -14,7 +14,13 @@ import (
 type fakeTransferClient struct {
 	uploadPath  string
 	uploadLocal string
+	uploadRev   string
 	downloadFn  func(path, local string) (*dropbox.Metadata, error)
+}
+
+func (f *fakeTransferClient) UploadFileAtRevision(ctx context.Context, dropboxPath, localPath, rev string) (*dropbox.Metadata, error) {
+	f.uploadRev = rev
+	return f.UploadFile(ctx, dropboxPath, localPath)
 }
 
 func (f *fakeTransferClient) UploadFile(_ context.Context, dropboxPath, localPath string) (*dropbox.Metadata, error) {
@@ -80,6 +86,25 @@ func TestTransferHandlerUploadsOnlyInsideRootAndUpdatesEntry(t *testing.T) {
 	}
 	if st.Entries != 1 || st.PendingOps != 0 {
 		t.Fatalf("status=%#v", st)
+	}
+}
+
+func TestTransferHandlerUsesRevisionConditionalUpload(t *testing.T) {
+	root := t.TempDir()
+	local := filepath.Join(root, "a.txt")
+	if err := os.WriteFile(local, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := testStore(t)
+	_, err := s.EnqueueOp("upload_local", "/a.txt", reconcile.PlannedOp{Op: "upload_local", Path: "/a.txt", LocalPath: local, Rev: "r0", ContentHash: mustHashPath(local)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeTransferClient{}
+	p := Processor{Store: s, Handler: TransferHandler{Store: s, Client: client, Root: root, AllowLive: true}, Now: fixedNow}
+	res, err := p.ProcessOne(context.Background())
+	if err != nil || !res.Completed || client.uploadRev != "r0" {
+		t.Fatalf("result=%#v client=%#v err=%v", res, client, err)
 	}
 }
 

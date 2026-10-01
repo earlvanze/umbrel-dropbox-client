@@ -16,6 +16,8 @@ import (
 	"github.com/earlvanze/umbrel-dropbox-client/internal/auth"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/hash"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/watch"
@@ -23,11 +25,14 @@ import (
 )
 
 type Daemon struct {
-	cfg          config.Config
-	cfgPath      string
-	store        *state.Store
-	log          *slog.Logger
-	remoteClient state.RemoteDeltaClient
+	cfg            config.Config
+	cfgPath        string
+	store          *state.Store
+	log            *slog.Logger
+	remoteClient   state.RemoteDeltaClient
+	metadataClient interface {
+		GetMetadata(context.Context, string) (*dropbox.Metadata, error)
+	}
 	dirty        *watch.DirtySet
 	lastFullScan time.Time
 	scanTrigger  chan struct{}
@@ -39,18 +44,20 @@ type restartRequest struct {
 }
 
 type CycleStats struct {
-	Root               string
-	LocalFiles         int
-	LocalChanged       int
-	WorkerProcessed    int
-	WorkerCompleted    int
-	WorkerFailed       int
-	WorkerProcessLimit int
-	RemotePages        int
-	RemoteEntries      int
-	RemoteAppliedFiles int
-	LocalMissing       int
-	Incremental        bool
+	Root                  string
+	LocalFiles            int
+	LocalChanged          int
+	WorkerProcessed       int
+	WorkerCompleted       int
+	WorkerFailed          int
+	WorkerProcessLimit    int
+	RemotePages           int
+	RemoteEntries         int
+	RemoteAppliedFiles    int
+	RemoteDownloadsQueued int
+	LocalUploadsQueued    int
+	LocalMissing          int
+	Incremental           bool
 }
 
 func New(cfg config.Config, store *state.Store, logger *slog.Logger) *Daemon {
@@ -248,8 +255,9 @@ func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (sta
 
 	// Determine scan scope
 	dirtyDirs := []string{}
+	dirtyPaths := []string{}
 	if incremental && d.dirty != nil {
-		dirtyDirs = d.dirty.Dirs()
+		dirtyDirs, dirtyPaths = d.dirty.DirsAndPaths()
 		if len(dirtyDirs) == 0 {
 			// Debounce fired but no actual dirty paths; skip
 			return CycleStats{Root: d.cfg.Root, Incremental: true}, nil
@@ -262,6 +270,16 @@ func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (sta
 		return CycleStats{}, err
 	}
 	scanOpts := d.buildScanOpts(known)
+	// Capture the remote revision and prior content before local scanning
+	// modifies entry rows. Only exact watch events can nominate uploads.
+	prior := make(map[string]*state.Entry, len(dirtyPaths))
+	for _, path := range dirtyPaths {
+		key := strings.ToLower(scan.DropboxPath(filepath.ToSlash(path)))
+		prior[key], err = d.store.EntryByPath(key)
+		if err != nil {
+			return CycleStats{}, err
+		}
+	}
 
 	var files []scan.File
 	if incremental && len(dirtyDirs) > 0 {
@@ -320,6 +338,14 @@ func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (sta
 			return CycleStats{}, err
 		}
 	}
+	remoteDownloadsQueued, err := d.enqueueRemoteDownloads(files, remoteStats.Metadata)
+	if err != nil {
+		return CycleStats{}, err
+	}
+	localUploadsQueued, err := d.enqueueWatchedUploads(ctx, files, prior, remoteStats.Metadata)
+	if err != nil {
+		return CycleStats{}, err
+	}
 
 	limit := d.workerLimit()
 	handler, err := d.workerHandler(ctx)
@@ -327,7 +353,7 @@ func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (sta
 		return CycleStats{}, err
 	}
 	p := worker.Processor{Store: d.store, Handler: handler}
-	stats = CycleStats{Root: d.cfg.Root, LocalFiles: len(files), LocalChanged: changed, WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles, LocalMissing: missing, Incremental: incremental}
+	stats = CycleStats{Root: d.cfg.Root, LocalFiles: len(files), LocalChanged: changed, WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles, RemoteDownloadsQueued: remoteDownloadsQueued, LocalUploadsQueued: localUploadsQueued, LocalMissing: missing, Incremental: incremental}
 	for stats.WorkerProcessed < limit {
 		res, err := p.ProcessOne(ctx)
 		if err != nil {
@@ -348,11 +374,166 @@ func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (sta
 	if incremental {
 		scanMode = "incremental"
 	}
-	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s mode=%s local_files=%d local_changed=%d local_missing=%d remote_entries=%d remote_applied_files=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, scanMode, stats.LocalFiles, stats.LocalChanged, stats.LocalMissing, stats.RemoteEntries, stats.RemoteAppliedFiles, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
+	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s mode=%s local_files=%d local_changed=%d local_missing=%d remote_entries=%d remote_applied_files=%d remote_downloads_queued=%d local_uploads_queued=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, scanMode, stats.LocalFiles, stats.LocalChanged, stats.LocalMissing, stats.RemoteEntries, stats.RemoteAppliedFiles, stats.RemoteDownloadsQueued, stats.LocalUploadsQueued, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
 		return stats, err
 	}
-	d.log.Info("sync cycle complete", "root", stats.Root, "mode", scanMode, "local_files", stats.LocalFiles, "local_changed", stats.LocalChanged, "local_missing", stats.LocalMissing, "remote_entries", stats.RemoteEntries, "remote_applied_files", stats.RemoteAppliedFiles, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
+	d.log.Info("sync cycle complete", "root", stats.Root, "mode", scanMode, "local_files", stats.LocalFiles, "local_changed", stats.LocalChanged, "local_missing", stats.LocalMissing, "remote_entries", stats.RemoteEntries, "remote_applied_files", stats.RemoteAppliedFiles, "remote_downloads_queued", stats.RemoteDownloadsQueued, "local_uploads_queued", stats.LocalUploadsQueued, "worker_processed", stats.WorkerProcessed, "worker_completed", stats.WorkerCompleted, "worker_failed", stats.WorkerFailed)
 	return stats, nil
+}
+
+// enqueueRemoteDownloads turns only this cycle's remote file delta into
+// download work. BuildDryRunPlan also identifies uploads and conflicts, but
+// those require their own policy path; queuing either here could resurrect a
+// remote rename's old local name.
+func (d *Daemon) enqueueRemoteDownloads(localFiles []scan.File, remoteEntries []dropbox.Metadata) (int, error) {
+	if len(remoteEntries) == 0 {
+		return 0, nil
+	}
+	plan := reconcile.BuildDryRunPlanWithRemoteBase(localFiles, remoteEntries, d.cfg.RemotePath)
+	for _, conflict := range plan.Conflicts {
+		if !d.cfg.IsPathInSyncScope(conflict.Path) {
+			continue
+		}
+		if _, _, err := d.store.AddConflictIfMissing(conflict.Path, conflict.Reason, conflict.LocalPath, conflict.RemoteRev); err != nil {
+			return 0, err
+		}
+	}
+	queued := 0
+	for _, op := range plan.Ops {
+		if op.Op != "download_remote" || !d.cfg.IsPathInSyncScope(op.Path) {
+			continue
+		}
+		// Incremental scans cover watched directories only. A remote delta may
+		// refer to an existing local file elsewhere; never queue an overwrite
+		// merely because it was absent from this cycle's local scan.
+		localPath := filepath.Join(d.cfg.Root, filepath.FromSlash(strings.TrimPrefix(op.Path, "/")))
+		rel, err := filepath.Rel(d.cfg.Root, localPath)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			return queued, fmt.Errorf("remote path %q escapes sync root", op.Path)
+		}
+		info, err := os.Lstat(localPath)
+		if err == nil {
+			if info.Mode().IsRegular() {
+				localHash, err := hash.DropboxContentHash(localPath)
+				if err != nil {
+					return queued, err
+				}
+				if localHash == op.ContentHash {
+					continue
+				}
+			}
+			if _, _, err := d.store.AddConflictIfMissing(op.Path, "remote changed while local file exists", localPath, op.Rev); err != nil {
+				return queued, err
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return queued, err
+		}
+		blocked, err := d.store.HasConflict(op.Path)
+		if err != nil {
+			return queued, err
+		}
+		if blocked {
+			continue
+		}
+		if _, created, err := d.store.EnqueueOpIfMissing(op.Op, op.Path, op); err != nil {
+			return queued, err
+		} else if created {
+			queued++
+		}
+	}
+	return queued, nil
+}
+
+// enqueueWatchedUploads deliberately ignores full scans and untouched
+// historical rows. A file must have an exact filesystem watch event and
+// either be newly observed or have a verified remote revision. Dropbox
+// add/update modes then enforce remote conflicts.
+func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.File, prior map[string]*state.Entry, remoteEntries []dropbox.Metadata) (int, error) {
+	if len(prior) == 0 {
+		return 0, nil
+	}
+	remoteChanged := make(map[string]bool, len(remoteEntries))
+	displayBase := strings.TrimSuffix(d.cfg.RemotePath, "/")
+	base := strings.ToLower(displayBase)
+	for _, meta := range remoteEntries {
+		path := meta.PathLower
+		if path == "" {
+			path = meta.PathDisplay
+		}
+		path = strings.ToLower(path)
+		if base != "" && base != "/" {
+			if !strings.HasPrefix(path, base+"/") {
+				continue
+			}
+			path = strings.TrimPrefix(path, base)
+		}
+		remoteChanged[path] = true
+	}
+	queued := 0
+	for _, f := range localFiles {
+		displayPath := scan.DropboxPath(f.Path)
+		path := strings.ToLower(displayPath)
+		old, watched := prior[path]
+		if !watched || remoteChanged[path] || !d.cfg.IsPathInSyncScope(path) {
+			continue
+		}
+		blocked, err := d.store.HasConflict(path)
+		if err != nil {
+			return queued, err
+		}
+		if blocked {
+			continue
+		}
+		if old != nil {
+			if old.ContentHash == f.ContentHash || old.State == "remote_scanned" {
+				continue
+			}
+		}
+		remotePath := displayPath
+		if base != "" && base != "/" {
+			remotePath = displayBase + displayPath
+		}
+		op := reconcile.PlannedOp{Op: "upload_local", Path: path, RemotePath: remotePath, LocalPath: f.AbsPath, ContentHash: f.ContentHash, Size: f.Size, Reason: "exact local watch event"}
+		if old != nil {
+			op.Rev = old.Rev
+			if op.Rev == "" {
+				meta, err := d.lookupExactRemoteMetadata(ctx, remotePath)
+				if err != nil {
+					return queued, err
+				}
+				// An old local-only file must not be silently resurrected. Only
+				// a remote file matching the previously scanned bytes supplies
+				// a safe base for a conditional update.
+				if meta == nil || meta.Tag != "file" || meta.Rev == "" || meta.ContentHash != old.ContentHash {
+					continue
+				}
+				op.Rev = meta.Rev
+			}
+		}
+		if _, created, err := d.store.ReplacePendingOp(op.Op, op.Path, op); err != nil {
+			return queued, err
+		} else if created {
+			queued++
+		}
+	}
+	return queued, nil
+}
+
+func (d *Daemon) lookupExactRemoteMetadata(ctx context.Context, path string) (*dropbox.Metadata, error) {
+	client := d.metadataClient
+	if client == nil {
+		if d.cfg.DryRun {
+			return nil, nil
+		}
+		accessToken, err := d.loadDropboxAccessToken(ctx)
+		if err != nil {
+			return nil, err
+		}
+		client = dropbox.New(accessToken)
+	}
+	return client.GetMetadata(ctx, path)
 }
 
 func (d *Daemon) buildScanOpts(known map[string]state.Entry) scan.Options {

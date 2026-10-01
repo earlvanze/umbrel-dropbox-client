@@ -96,6 +96,26 @@ func (s *Store) EnqueueOpIfMissing(op, path string, payload any) (int64, bool, e
 	return id, true, err
 }
 
+// ReplacePendingOp refreshes an unprocessed operation after another exact
+// local change, including clearing a stale retry timer and attempt count.
+func (s *Store) ReplacePendingOp(op, path string, payload any) (int64, bool, error) {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return 0, false, err
+	}
+	var id int64
+	err = s.db.QueryRow(`select id from pending_ops where op = ? and path = ? and status = 'pending' limit 1`, op, path).Scan(&id)
+	if err == sql.ErrNoRows {
+		id, err = s.EnqueueOp(op, path, payload)
+		return id, true, err
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	_, err = s.db.Exec(`update pending_ops set payload = ?, attempts = 0, retry_at = null, last_error = '' where id = ? and status = 'pending'`, string(b), id)
+	return id, false, err
+}
+
 func (s *Store) PendingOpByID(id int64) (*PendingOp, error) {
 	row := s.db.QueryRow(`select id, op, path, coalesce(payload,''), created_at, attempts, status, coalesce(retry_at,''), coalesce(last_error,''), coalesce(completed_at,'') from pending_ops where id = ?`, id)
 	var out PendingOp

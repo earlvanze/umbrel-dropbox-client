@@ -139,6 +139,51 @@ func (c *Client) ListFolderAll(ctx context.Context, path string, recursive bool)
 	return entries, cursor, nil
 }
 
+// GetMetadata returns nil only when Dropbox confirms the path does not exist.
+// It is used for exact watched files whose prior local scan lacks a remote
+// revision; no folder listing or historical backfill is required.
+func (c *Client) GetMetadata(ctx context.Context, path string) (*Metadata, error) {
+	arg, err := json.Marshal(map[string]any{"path": path, "include_deleted": false})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL+"/files/get_metadata", bytes.NewReader(arg))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusConflict {
+		var body struct {
+			Error struct {
+				Tag  string `json:".tag"`
+				Path struct {
+					Tag string `json:".tag"`
+				} `json:"path"`
+			} `json:"error"`
+		}
+		if err := json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&body); err != nil {
+			return nil, err
+		}
+		if body.Error.Tag == "path" && body.Error.Path.Tag == "not_found" {
+			return nil, nil
+		}
+	}
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return nil, fmt.Errorf("dropbox metadata: %s", res.Status)
+	}
+	var meta Metadata
+	if err := json.NewDecoder(res.Body).Decode(&meta); err != nil {
+		return nil, err
+	}
+	return &meta, nil
+}
+
 func (c *Client) UploadFile(ctx context.Context, dropboxPath, localPath string) (*Metadata, error) {
 	f, err := os.Open(localPath)
 	if err != nil {
@@ -148,12 +193,38 @@ func (c *Client) UploadFile(ctx context.Context, dropboxPath, localPath string) 
 	return c.Upload(ctx, dropboxPath, f)
 }
 
+// UploadFileAtRevision updates an existing Dropbox file only if its revision
+// still matches the revision observed before the local edit was queued.
+func (c *Client) UploadFileAtRevision(ctx context.Context, dropboxPath, localPath, rev string) (*Metadata, error) {
+	if rev == "" {
+		return nil, fmt.Errorf("revision required for conditional upload")
+	}
+	f, err := os.Open(localPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	arg := map[string]any{
+		"path":            dropboxPath,
+		"mode":            map[string]string{".tag": "update", "update": rev},
+		"autorename":      false,
+		"strict_conflict": true,
+		"mute":            false,
+	}
+	var out Metadata
+	if err := c.content(ctx, c.contentURL+"/files/upload", arg, f, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) Upload(ctx context.Context, dropboxPath string, body io.Reader) (*Metadata, error) {
 	arg := map[string]any{
-		"path":       dropboxPath,
-		"mode":       "add",
-		"autorename": false,
-		"mute":       false,
+		"path":            dropboxPath,
+		"mode":            "add",
+		"autorename":      false,
+		"strict_conflict": true,
+		"mute":            false,
 	}
 	var out Metadata
 	if err := c.content(ctx, c.contentURL+"/files/upload", arg, body, &out); err != nil {

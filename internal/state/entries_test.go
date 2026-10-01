@@ -168,3 +168,24 @@ func TestLocalEntriesInDirsEmptyPrefixIsRootOnly(t *testing.T) {
 		t.Fatal("did not expect /sub/inner.txt in root-only query")
 	}
 }
+
+func TestLocalScanPreservesRemoteRevision(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertEntry(Entry{Path: "/a.txt", DropboxID: "id:1", Rev: "r1", ContentHash: "old", Size: 3, MTime: time.Now(), State: "clean"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpsertEntryIfChanged(Entry{Path: "/a.txt", ContentHash: "new", Size: 3, MTime: time.Now(), State: "local_scanned"}); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := s.EntryByPath("/a.txt")
+	if err != nil || entry == nil || entry.DropboxID != "id:1" || entry.Rev != "r1" || entry.ContentHash != "new" {
+		t.Fatalf("entry=%#v err=%v", entry, err)
+	}
+}

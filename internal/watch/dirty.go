@@ -51,18 +51,29 @@ func (d *DirtySet) Add(absPath string) {
 // Dirs returns the deduplicated set of dirty directory paths (relative to
 // root) and clears the dirty set. An empty string means the root directory.
 func (d *DirtySet) Dirs() []string {
+	dirs, _ := d.DirsAndPaths()
+	return dirs
+}
+
+// DirsAndPaths atomically drains the dirty directories and exact watched
+// paths. Uploads must use exact paths, never every file in a scanned directory.
+func (d *DirtySet) DirsAndPaths() ([]string, []string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if len(d.dirs) == 0 && len(d.paths) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]string, 0, len(d.dirs))
 	for dir := range d.dirs {
 		out = append(out, dir)
 	}
+	paths := make([]string, 0, len(d.paths))
+	for path := range d.paths {
+		paths = append(paths, path)
+	}
 	d.paths = make(map[string]bool)
 	d.dirs = make(map[string]bool)
-	return out
+	return out, paths
 }
 
 // Len returns the number of unique dirty paths recorded since last Dirs call.
