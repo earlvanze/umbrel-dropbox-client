@@ -32,7 +32,7 @@ type RemoteDeltaStats struct {
 	// Metadata is the exact delta received during this cycle. The daemon uses
 	// it to queue only newly observed remote downloads, rather than walking the
 	// entire persisted remote-scanned backlog on every cycle.
-	Metadata       []dropbox.Metadata
+	Metadata []dropbox.Metadata
 }
 
 func (s *Store) IngestRemoteDelta(ctx context.Context, client RemoteDeltaClient, remotePath string) (RemoteDeltaStats, error) {
@@ -49,14 +49,25 @@ func (s *Store) IngestRemoteDeltaFilter(ctx context.Context, client RemoteDeltaC
 	if err != nil {
 		return RemoteDeltaStats{}, err
 	}
-	applied, deleted, err := s.applyRemoteDeltaMetadata(delta.Entries, remotePath, filter)
+	accepted := make([]dropbox.Metadata, 0, len(delta.Entries))
+	for _, entry := range delta.Entries {
+		path := entry.PathLower
+		if path == "" {
+			path = entry.PathDisplay
+		}
+		path = stripRemoteBase(path, remotePath)
+		if path != "" && (filter == nil || filter(path)) {
+			accepted = append(accepted, entry)
+		}
+	}
+	applied, deleted, err := s.applyRemoteDeltaMetadata(accepted, remotePath, nil)
 	if err != nil {
 		return RemoteDeltaStats{}, err
 	}
 	if err := s.SetConfig(cursorKey, delta.Cursor); err != nil {
 		return RemoteDeltaStats{}, err
 	}
-	stats := RemoteDeltaStats{PreviousCursor: cursor, Cursor: delta.Cursor, Pages: delta.Pages, Entries: len(delta.Entries), AppliedFiles: applied, DeletedEntries: deleted, Metadata: delta.Entries}
+	stats := RemoteDeltaStats{PreviousCursor: cursor, Cursor: delta.Cursor, Pages: delta.Pages, Entries: len(delta.Entries), AppliedFiles: applied, DeletedEntries: deleted, Metadata: accepted}
 	if err := s.Event("remote.delta", fmt.Sprintf("previous_cursor=%s cursor=%s pages=%d entries=%d applied_files=%d deleted_entries=%d", stats.PreviousCursor, stats.Cursor, stats.Pages, stats.Entries, stats.AppliedFiles, stats.DeletedEntries)); err != nil {
 		return stats, err
 	}

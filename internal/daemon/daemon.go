@@ -16,6 +16,7 @@ import (
 	"github.com/earlvanze/umbrel-dropbox-client/internal/auth"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/hash"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
@@ -389,9 +390,51 @@ func (d *Daemon) enqueueRemoteDownloads(localFiles []scan.File, remoteEntries []
 		return 0, nil
 	}
 	plan := reconcile.BuildDryRunPlanWithRemoteBase(localFiles, remoteEntries, d.cfg.RemotePath)
+	for _, conflict := range plan.Conflicts {
+		if !d.cfg.IsPathInSyncScope(conflict.Path) {
+			continue
+		}
+		if _, _, err := d.store.AddConflictIfMissing(conflict.Path, conflict.Reason, conflict.LocalPath, conflict.RemoteRev); err != nil {
+			return 0, err
+		}
+	}
 	queued := 0
 	for _, op := range plan.Ops {
-		if op.Op != "download_remote" {
+		if op.Op != "download_remote" || !d.cfg.IsPathInSyncScope(op.Path) {
+			continue
+		}
+		// Incremental scans cover watched directories only. A remote delta may
+		// refer to an existing local file elsewhere; never queue an overwrite
+		// merely because it was absent from this cycle's local scan.
+		localPath := filepath.Join(d.cfg.Root, filepath.FromSlash(strings.TrimPrefix(op.Path, "/")))
+		rel, err := filepath.Rel(d.cfg.Root, localPath)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			return queued, fmt.Errorf("remote path %q escapes sync root", op.Path)
+		}
+		info, err := os.Lstat(localPath)
+		if err == nil {
+			if info.Mode().IsRegular() {
+				localHash, err := hash.DropboxContentHash(localPath)
+				if err != nil {
+					return queued, err
+				}
+				if localHash == op.ContentHash {
+					continue
+				}
+			}
+			if _, _, err := d.store.AddConflictIfMissing(op.Path, "remote changed while local file exists", localPath, op.Rev); err != nil {
+				return queued, err
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return queued, err
+		}
+		blocked, err := d.store.HasConflict(op.Path)
+		if err != nil {
+			return queued, err
+		}
+		if blocked {
 			continue
 		}
 		if _, created, err := d.store.EnqueueOpIfMissing(op.Op, op.Path, op); err != nil {
@@ -431,7 +474,14 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 	for _, f := range localFiles {
 		path := strings.ToLower(scan.DropboxPath(f.Path))
 		old, watched := prior[path]
-		if !watched || remoteChanged[path] {
+		if !watched || remoteChanged[path] || !d.cfg.IsPathInSyncScope(path) {
+			continue
+		}
+		blocked, err := d.store.HasConflict(path)
+		if err != nil {
+			return queued, err
+		}
+		if blocked {
 			continue
 		}
 		if old != nil {
@@ -460,7 +510,7 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 				op.Rev = meta.Rev
 			}
 		}
-		if _, created, err := d.store.EnqueueOpIfMissing(op.Op, op.Path, op); err != nil {
+		if _, created, err := d.store.ReplacePendingOp(op.Op, op.Path, op); err != nil {
 			return queued, err
 		} else if created {
 			queued++

@@ -36,6 +36,15 @@ func (s *Store) ListConflicts(limit int) ([]ConflictRecord, error) {
 	return out, rows.Err()
 }
 
+func (s *Store) HasConflict(path string) (bool, error) {
+	var id int64
+	err := s.db.QueryRow(`select id from conflicts where path = ? limit 1`, normalizeEntryPath(path)).Scan(&id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 func (s *Store) ResolveConflict(id int64, note string) (bool, error) {
 	var path string
 	err := s.db.QueryRow(`select path from conflicts where id = ?`, id).Scan(&path)

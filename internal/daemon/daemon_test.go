@@ -129,6 +129,64 @@ func TestWatchedUploadRefreshesExactMissingRevision(t *testing.T) {
 	}
 }
 
+func TestRemoteChangeRecordsConflictAndBlocksWatchedUpload(t *testing.T) {
+	root := t.TempDir()
+	localPath := filepath.Join(root, "file.txt")
+	if err := os.WriteFile(localPath, []byte("local"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := testStore(t)
+	d := New(config.Config{Root: root, DryRun: true}, s, nil)
+	remote := []dropbox.Metadata{{Tag: "file", PathLower: "/file.txt", Rev: "remote-r2", ContentHash: "different"}}
+	queued, err := d.enqueueRemoteDownloads(nil, remote)
+	if err != nil || queued != 0 {
+		t.Fatalf("queued=%d err=%v", queued, err)
+	}
+	blocked, err := s.HasConflict("/file.txt")
+	if err != nil || !blocked {
+		t.Fatalf("blocked=%v err=%v", blocked, err)
+	}
+	files := []scan.File{{Path: "/file.txt", AbsPath: localPath, ContentHash: "new-local"}}
+	prior := map[string]*state.Entry{"/file.txt": {Path: "/file.txt", ContentHash: "old-local", Rev: "remote-r2", State: "clean"}}
+	queued, err = d.enqueueWatchedUploads(context.Background(), files, prior, nil)
+	if err != nil || queued != 0 {
+		t.Fatalf("upload queued=%d err=%v", queued, err)
+	}
+}
+
+func TestRemoteDownloadsRespectScope(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), DryRun: true, SyncPaths: []string{"/allowed"}}, s, nil)
+	remote := []dropbox.Metadata{{Tag: "file", PathLower: "/excluded/file.txt", ContentHash: "hash"}}
+	queued, err := d.enqueueRemoteDownloads(nil, remote)
+	if err != nil || queued != 0 {
+		t.Fatalf("queued=%d err=%v", queued, err)
+	}
+}
+
+func TestWatchedUploadRefreshesPendingPayload(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), DryRun: true}, s, nil)
+	prior := map[string]*state.Entry{"/file.txt": {Path: "/file.txt", ContentHash: "old", Rev: "r1", State: "clean"}}
+	files := []scan.File{{Path: "/file.txt", ContentHash: "first"}}
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 1 {
+		t.Fatalf("first queued=%d err=%v", n, err)
+	}
+	op, err := s.NextPendingOp()
+	if err != nil || op == nil {
+		t.Fatalf("op=%#v err=%v", op, err)
+	}
+	prior["/file.txt"].ContentHash = "first"
+	files[0].ContentHash = "second"
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 0 {
+		t.Fatalf("second queued=%d err=%v", n, err)
+	}
+	updated, err := s.PendingOpByID(op.ID)
+	if err != nil || updated == nil || !strings.Contains(updated.Payload, `"content_hash":"second"`) {
+		t.Fatalf("updated=%#v err=%v", updated, err)
+	}
+}
+
 func TestRunCycleQueuesOnlyExactWatchedNewFile(t *testing.T) {
 	root := t.TempDir()
 	neighbor := filepath.Join(root, "neighbor.txt")

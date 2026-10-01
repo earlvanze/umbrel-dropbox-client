@@ -155,6 +155,32 @@ func TestIngestRemoteDeltaDoesNotPruneFilteredDeletion(t *testing.T) {
 	}
 }
 
+func TestIngestRemoteDeltaMetadataRespectsScope(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteDeltaClient{pages: map[string]*dropbox.ListFolderResult{
+		"": {Entries: []dropbox.Metadata{
+			{Tag: "file", PathLower: "/allowed/a.txt", ContentHash: "a"},
+			{Tag: "file", PathLower: "/excluded/b.txt", ContentHash: "b"},
+		}, Cursor: "next"},
+	}}
+	stats, err := s.IngestRemoteDeltaFilter(context.Background(), client, "/", func(path string) bool {
+		return path == "/allowed/a.txt"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Entries != 2 || stats.AppliedFiles != 1 || len(stats.Metadata) != 1 || stats.Metadata[0].PathLower != "/allowed/a.txt" {
+		t.Fatalf("stats=%#v", stats)
+	}
+}
+
 func TestIngestRemoteDeltaStripsRemoteBase(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {

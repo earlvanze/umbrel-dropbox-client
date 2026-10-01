@@ -25,6 +25,32 @@ func TestEnqueueOpIfMissingDedupesByOpAndPath(t *testing.T) {
 	}
 }
 
+func TestReplacePendingOpRefreshesPayloadAndRetry(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	id, created, err := s.ReplacePendingOp("upload_local", "/a.txt", map[string]string{"hash": "old"})
+	if err != nil || !created {
+		t.Fatalf("first id=%d created=%v err=%v", id, created, err)
+	}
+	if err := s.RetryOp(id, time.Now().Add(time.Hour), "stale"); err != nil {
+		t.Fatal(err)
+	}
+	updatedID, created, err := s.ReplacePendingOp("upload_local", "/a.txt", map[string]string{"hash": "new"})
+	if err != nil || created || updatedID != id {
+		t.Fatalf("updated id=%d created=%v err=%v", updatedID, created, err)
+	}
+	op, err := s.PendingOpByID(id)
+	if err != nil || op == nil || op.Payload != `{"hash":"new"}` || op.Attempts != 0 || !op.RetryAt.IsZero() || op.LastError != "" {
+		t.Fatalf("op=%#v err=%v", op, err)
+	}
+}
+
 func TestNextReadyPendingOpSkipsFutureRetriesAndFailedOps(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
