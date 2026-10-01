@@ -102,7 +102,9 @@ func (s *Store) UpsertEntryIfChanged(e Entry) (bool, error) {
 	if existingHash == e.ContentHash && existingSize == e.Size && existingMtime == e.MTime.Unix() && existingState == state {
 		return false, nil
 	}
-	_, err = s.db.Exec(`update entries set dropbox_id=?, rev=?, content_hash=?, size=?, mtime_unix=?, state=? where path=?`,
+	// A local scan cannot erase the last known remote identity/revision. That
+	// revision is the compare-and-swap base for a later local upload.
+	_, err = s.db.Exec(`update entries set dropbox_id=coalesce(nullif(?,''),dropbox_id), rev=coalesce(nullif(?,''),rev), content_hash=?, size=?, mtime_unix=?, state=? where path=?`,
 		e.DropboxID, e.Rev, e.ContentHash, e.Size, e.MTime.Unix(), state, e.Path)
 	return true, err
 }
@@ -167,4 +169,23 @@ func (s *Store) DeleteEntry(path string) error {
 	path = normalizeEntryPath(path)
 	_, err := s.db.Exec(`delete from entries where path = ?`, path)
 	return err
+}
+
+func (s *Store) DeleteEntriesUnder(path string) (int, error) {
+	path = normalizeEntryPath(path)
+	if path == "" {
+		return 0, fmt.Errorf("state: refusing to delete entries under empty path")
+	}
+	prefix := strings.TrimSuffix(path, "/") + "/"
+	result, err := s.db.Exec(
+		`delete from entries where path = ? or substr(path, 1, length(?)) = ?`,
+		path,
+		prefix,
+		prefix,
+	)
+	if err != nil {
+		return 0, err
+	}
+	deleted, err := result.RowsAffected()
+	return int(deleted), err
 }

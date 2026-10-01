@@ -87,6 +87,74 @@ func TestIngestRemoteDeltaUsesStoredCursor(t *testing.T) {
 	}
 }
 
+func TestIngestRemoteDeltaPrunesDeletedPathAndDescendants(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/property/old.pdf", "/property/photos/a.jpg", "/other/keep.pdf"} {
+		if err := s.UpsertEntry(Entry{Path: path, ContentHash: "hash", State: "remote_scanned"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	client := &fakeRemoteDeltaClient{pages: map[string]*dropbox.ListFolderResult{
+		"": {Entries: []dropbox.Metadata{{Tag: "deleted", PathLower: "/real estate/property"}}, Cursor: "next"},
+	}}
+
+	stats, err := s.IngestRemoteDelta(context.Background(), client, "/Real Estate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.AppliedFiles != 0 || stats.DeletedEntries != 2 {
+		t.Fatalf("stats=%#v", stats)
+	}
+	for _, path := range []string{"/property/old.pdf", "/property/photos/a.jpg"} {
+		entry, err := s.EntryByPath(path)
+		if err != nil || entry != nil {
+			t.Fatalf("path=%q entry=%#v err=%v", path, entry, err)
+		}
+	}
+	keep, err := s.EntryByPath("/other/keep.pdf")
+	if err != nil || keep == nil {
+		t.Fatalf("keep=%#v err=%v", keep, err)
+	}
+}
+
+func TestIngestRemoteDeltaDoesNotPruneFilteredDeletion(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertEntry(Entry{Path: "/private/file.pdf", ContentHash: "hash", State: "remote_scanned"}); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteDeltaClient{pages: map[string]*dropbox.ListFolderResult{
+		"": {Entries: []dropbox.Metadata{{Tag: "deleted", PathLower: "/real estate/private/file.pdf"}}, Cursor: "next"},
+	}}
+
+	stats, err := s.IngestRemoteDeltaFilter(context.Background(), client, "/Real Estate", func(path string) bool {
+		return path != "/private/file.pdf"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.DeletedEntries != 0 {
+		t.Fatalf("stats=%#v", stats)
+	}
+	entry, err := s.EntryByPath("/private/file.pdf")
+	if err != nil || entry == nil {
+		t.Fatalf("entry=%#v err=%v", entry, err)
+	}
+}
+
 func TestIngestRemoteDeltaStripsRemoteBase(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {

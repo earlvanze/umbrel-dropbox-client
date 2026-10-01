@@ -19,6 +19,10 @@ type TransferClient interface {
 	DownloadFile(ctx context.Context, dropboxPath, localPath string) (*dropbox.Metadata, error)
 }
 
+type revisionUploader interface {
+	UploadFileAtRevision(ctx context.Context, dropboxPath, localPath, rev string) (*dropbox.Metadata, error)
+}
+
 type TransferHandler struct {
 	Store     *state.Store
 	Client    TransferClient
@@ -75,7 +79,17 @@ func (h TransferHandler) upload(ctx context.Context, planned reconcile.PlannedOp
 			return fmt.Errorf("upload_local %s content hash changed", planned.Path)
 		}
 	}
-	meta, err := h.Client.UploadFile(ctx, dropboxPath, localPath)
+	var meta *dropbox.Metadata
+	var err error
+	if planned.Rev != "" {
+		client, ok := h.Client.(revisionUploader)
+		if !ok {
+			return fmt.Errorf("upload_local %s requires revision-conditional client", planned.Path)
+		}
+		meta, err = client.UploadFileAtRevision(ctx, dropboxPath, localPath, planned.Rev)
+	} else {
+		meta, err = h.Client.UploadFile(ctx, dropboxPath, localPath)
+	}
 	if err != nil {
 		return err
 	}
