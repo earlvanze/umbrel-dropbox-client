@@ -455,7 +455,8 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 		return 0, nil
 	}
 	remoteChanged := make(map[string]bool, len(remoteEntries))
-	base := strings.ToLower(strings.TrimSuffix(d.cfg.RemotePath, "/"))
+	displayBase := strings.TrimSuffix(d.cfg.RemotePath, "/")
+	base := strings.ToLower(displayBase)
 	for _, meta := range remoteEntries {
 		path := meta.PathLower
 		if path == "" {
@@ -472,7 +473,8 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 	}
 	queued := 0
 	for _, f := range localFiles {
-		path := strings.ToLower(scan.DropboxPath(f.Path))
+		displayPath := scan.DropboxPath(f.Path)
+		path := strings.ToLower(displayPath)
 		old, watched := prior[path]
 		if !watched || remoteChanged[path] || !d.cfg.IsPathInSyncScope(path) {
 			continue
@@ -489,9 +491,9 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 				continue
 			}
 		}
-		remotePath := path
+		remotePath := displayPath
 		if base != "" && base != "/" {
-			remotePath = base + path
+			remotePath = displayBase + displayPath
 		}
 		op := reconcile.PlannedOp{Op: "upload_local", Path: path, RemotePath: remotePath, LocalPath: f.AbsPath, ContentHash: f.ContentHash, Size: f.Size, Reason: "exact local watch event"}
 		if old != nil {

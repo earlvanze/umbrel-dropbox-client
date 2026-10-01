@@ -187,6 +187,20 @@ func TestWatchedUploadRefreshesPendingPayload(t *testing.T) {
 	}
 }
 
+func TestWatchedUploadPreservesRemoteDisplayCase(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), RemotePath: "/Real Estate", DryRun: true}, s, nil)
+	files := []scan.File{{Path: "/Sale/Closing.PDF", ContentHash: "new"}}
+	prior := map[string]*state.Entry{"/sale/closing.pdf": nil}
+	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 1 {
+		t.Fatalf("queued=%d err=%v", n, err)
+	}
+	op, err := s.NextPendingOp()
+	if err != nil || op == nil || !strings.Contains(op.Payload, `"remote_path":"/Real Estate/Sale/Closing.PDF"`) {
+		t.Fatalf("op=%#v err=%v", op, err)
+	}
+}
+
 func TestRunCycleQueuesOnlyExactWatchedNewFile(t *testing.T) {
 	root := t.TempDir()
 	neighbor := filepath.Join(root, "neighbor.txt")
