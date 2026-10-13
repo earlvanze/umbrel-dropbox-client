@@ -1,7 +1,9 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY . .
-RUN go build -o /out/umbrel-dropbox-client ./cmd/umbrel-dropbox-client && go build -o /out/umbrel-dropbox-clientd ./cmd/umbrel-dropbox-clientd
+RUN go test ./... && \
+    go build -o /out/umbrel-dropbox-client ./cmd/umbrel-dropbox-client && \
+    go build -o /out/umbrel-dropbox-clientd ./cmd/umbrel-dropbox-clientd
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates sqlite-libs

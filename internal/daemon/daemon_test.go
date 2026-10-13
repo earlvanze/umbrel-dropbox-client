@@ -723,3 +723,19 @@ func waitForEntries(t *testing.T, s *state.Store, want int) {
 	st, _ := s.Status()
 	t.Fatalf("entries=%d want=%d", st.Entries, want)
 }
+
+func TestWatchedUploadPreservesRemoteDisplayCaseForExactRevisionLookup(t *testing.T) {
+	s := testStore(t)
+	d := New(config.Config{Root: t.TempDir(), DryRun: true}, s, nil)
+	d.metadataClient = fakeExactMetadataClient{meta: &dropbox.Metadata{Tag: "file", PathLower: "/ledger.csv", Rev: "r9", ContentHash: "old"}}
+	files := []scan.File{{Path: "/LEDGER.csv", ContentHash: "new"}}
+	prior := map[string]*state.Entry{"/ledger.csv": {Path: "/ledger.csv", ContentHash: "old", State: "local_scanned"}}
+	n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil)
+	if err != nil || n != 1 {
+		t.Fatalf("queued=%d err=%v", n, err)
+	}
+	op, err := s.NextPendingOp()
+	if err != nil || op == nil || !strings.Contains(op.Payload, `"remote_path":"/LEDGER.csv"`) || !strings.Contains(op.Payload, `"path":"/ledger.csv"`) {
+		t.Fatalf("op=%#v", op)
+	}
+}
