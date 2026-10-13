@@ -495,10 +495,29 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 		if base != "" && base != "/" {
 			remotePath = displayBase + displayPath
 		}
-		op := reconcile.PlannedOp{Op: "upload_local", Path: path, RemotePath: remotePath, LocalPath: f.AbsPath, ContentHash: f.ContentHash, Size: f.Size, Reason: "exact local watch event"}
+		rootAbs, rootErr := filepath.Abs(d.cfg.Root)
+		if rootErr != nil {
+			return queued, rootErr
+		}
+		caseVerified := false
+		if f.AbsPath != "" {
+			localAbs, err := filepath.Abs(f.AbsPath)
+			if err != nil {
+				return queued, err
+			}
+			localRel, relErr := filepath.Rel(rootAbs, localAbs)
+			if relErr != nil || localRel == "." || strings.HasPrefix(localRel, ".."+string(filepath.Separator)) || filepath.IsAbs(localRel) {
+				return queued, fmt.Errorf("local path %q escapes sync root", f.AbsPath)
+			}
+			caseVerified = displayPath == scan.DropboxPath(filepath.ToSlash(localRel))
+		}
+		op := reconcile.PlannedOp{Op: "upload_local", Path: path, RemotePath: remotePath, LocalPath: f.AbsPath, ContentHash: f.ContentHash, Size: f.Size, LocalPathCaseVerified: caseVerified, Reason: "exact local watch event"}
 		if old != nil {
 			op.Rev = old.Rev
 			if op.Rev == "" {
+				if !caseVerified {
+					continue
+				}
 				meta, err := d.lookupExactRemoteMetadata(ctx, remotePath)
 				if err != nil {
 					return queued, err

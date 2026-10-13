@@ -28,7 +28,7 @@ func TestRunCycleScansLocalFilesAndProcessesDryRunQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := testStore(t)
-	if _, err := s.EnqueueOp("upload_local", "/a.txt", reconcile.PlannedOp{Op: "upload_local", Path: "/a.txt", LocalPath: local, Reason: "test"}); err != nil {
+	if _, err := s.EnqueueOp("upload_local", "/a.txt", reconcile.PlannedOp{Op: "upload_local", Path: "/a.txt", LocalPath: local, LocalPathCaseVerified: true, Reason: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	d := New(config.Config{Root: root, DryRun: true, UploadWorkers: 1, DownloadWorkers: 1}, s, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -106,9 +106,10 @@ func (f fakeExactMetadataClient) GetMetadata(_ context.Context, _ string) (*drop
 
 func TestWatchedUploadRefreshesExactMissingRevision(t *testing.T) {
 	s := testStore(t)
-	d := New(config.Config{Root: t.TempDir(), DryRun: true}, s, nil)
+	root := t.TempDir()
+	d := New(config.Config{Root: root, DryRun: true}, s, nil)
 	d.metadataClient = fakeExactMetadataClient{meta: &dropbox.Metadata{Tag: "file", PathLower: "/ledger.csv", Rev: "r9", ContentHash: "old"}}
-	files := []scan.File{{Path: "/ledger.csv", ContentHash: "new"}}
+	files := []scan.File{{Path: "/ledger.csv", AbsPath: filepath.Join(root, "ledger.csv"), ContentHash: "new"}}
 	prior := map[string]*state.Entry{"/ledger.csv": {Path: "/ledger.csv", ContentHash: "old", State: "local_scanned"}}
 	n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil)
 	if err != nil || n != 1 {
@@ -166,9 +167,10 @@ func TestRemoteDownloadsRespectScope(t *testing.T) {
 
 func TestWatchedUploadRefreshesPendingPayload(t *testing.T) {
 	s := testStore(t)
-	d := New(config.Config{Root: t.TempDir(), DryRun: true}, s, nil)
+	root := t.TempDir()
+	d := New(config.Config{Root: root, DryRun: true}, s, nil)
 	prior := map[string]*state.Entry{"/file.txt": {Path: "/file.txt", ContentHash: "old", Rev: "r1", State: "clean"}}
-	files := []scan.File{{Path: "/file.txt", ContentHash: "first"}}
+	files := []scan.File{{Path: "/file.txt", AbsPath: filepath.Join(root, "file.txt"), ContentHash: "first"}}
 	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 1 {
 		t.Fatalf("first queued=%d err=%v", n, err)
 	}
@@ -189,8 +191,9 @@ func TestWatchedUploadRefreshesPendingPayload(t *testing.T) {
 
 func TestWatchedUploadPreservesRemoteDisplayCase(t *testing.T) {
 	s := testStore(t)
-	d := New(config.Config{Root: t.TempDir(), RemotePath: "/Real Estate", DryRun: true}, s, nil)
-	files := []scan.File{{Path: "/Sale/Closing.PDF", ContentHash: "new"}}
+	root := t.TempDir()
+	d := New(config.Config{Root: root, RemotePath: "/Real Estate", DryRun: true}, s, nil)
+	files := []scan.File{{Path: "/Sale/Closing.PDF", AbsPath: filepath.Join(root, "Sale", "Closing.PDF"), ContentHash: "new"}}
 	prior := map[string]*state.Entry{"/sale/closing.pdf": nil}
 	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 1 {
 		t.Fatalf("queued=%d err=%v", n, err)
@@ -726,9 +729,10 @@ func waitForEntries(t *testing.T, s *state.Store, want int) {
 
 func TestWatchedUploadPreservesRemoteDisplayCaseForExactRevisionLookup(t *testing.T) {
 	s := testStore(t)
-	d := New(config.Config{Root: t.TempDir(), DryRun: true}, s, nil)
+	root := t.TempDir()
+	d := New(config.Config{Root: root, DryRun: true}, s, nil)
 	d.metadataClient = fakeExactMetadataClient{meta: &dropbox.Metadata{Tag: "file", PathLower: "/ledger.csv", Rev: "r9", ContentHash: "old"}}
-	files := []scan.File{{Path: "/LEDGER.csv", ContentHash: "new"}}
+	files := []scan.File{{Path: "/LEDGER.csv", AbsPath: filepath.Join(root, "LEDGER.csv"), ContentHash: "new"}}
 	prior := map[string]*state.Entry{"/ledger.csv": {Path: "/ledger.csv", ContentHash: "old", State: "local_scanned"}}
 	n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil)
 	if err != nil || n != 1 {

@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -10,15 +11,16 @@ import (
 )
 
 type PlannedOp struct {
-	Op          string `json:"op"`
-	Path        string `json:"path"`
-	RemotePath  string `json:"remote_path,omitempty"`
-	LocalPath   string `json:"local_path,omitempty"`
-	DropboxID   string `json:"dropbox_id,omitempty"`
-	Rev         string `json:"rev,omitempty"`
-	ContentHash string `json:"content_hash,omitempty"`
-	Size        int64  `json:"size,omitempty"`
-	Reason      string `json:"reason"`
+	Op                    string `json:"op"`
+	Path                  string `json:"path"`
+	RemotePath            string `json:"remote_path,omitempty"`
+	LocalPath             string `json:"local_path,omitempty"`
+	DropboxID             string `json:"dropbox_id,omitempty"`
+	Rev                   string `json:"rev,omitempty"`
+	ContentHash           string `json:"content_hash,omitempty"`
+	Size                  int64  `json:"size,omitempty"`
+	LocalPathCaseVerified bool   `json:"local_path_case_verified,omitempty"`
+	Reason                string `json:"reason"`
 }
 
 type PlannedConflict struct {
@@ -85,7 +87,16 @@ func BuildDryRunPlanWithRemoteBase(localFiles []scan.File, remoteEntries []dropb
 		case conflict.Noop:
 			out.Noop++
 		case conflict.UploadLocal:
-			out.Ops = append(out.Ops, PlannedOp{Op: string(conflict.UploadLocal), Path: p, RemotePath: joinRemoteBase(base, p), LocalPath: lf.AbsPath, ContentHash: lf.ContentHash, Size: lf.Size, Reason: res.Reason})
+			caseVerified := false
+			if lf.AbsPath != "" {
+				absPath, absErr := filepath.Abs(lf.AbsPath)
+				rootAbs := filepath.Dir(lf.Path)
+				rel, relErr := filepath.Rel(rootAbs, absPath)
+				if absErr == nil && relErr == nil && rel != "." && filepath.IsAbs(rel) == false && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					caseVerified = normalize(p) == normalize(scan.DropboxPath(filepath.ToSlash(rel)))
+				}
+			}
+			out.Ops = append(out.Ops, PlannedOp{Op: string(conflict.UploadLocal), Path: p, RemotePath: joinRemoteBase(base, p), LocalPath: lf.AbsPath, ContentHash: lf.ContentHash, Size: lf.Size, LocalPathCaseVerified: caseVerified, Reason: res.Reason})
 		case conflict.DownloadRemote:
 			out.Ops = append(out.Ops, PlannedOp{Op: string(conflict.DownloadRemote), Path: p, RemotePath: remotePaths[p], DropboxID: re.ID, Rev: re.Rev, ContentHash: re.ContentHash, Size: re.Size, Reason: res.Reason})
 		case conflict.RecordConflict:
