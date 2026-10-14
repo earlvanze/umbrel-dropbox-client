@@ -100,14 +100,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 		d.dirty.Reset()
 	}
 	// Drain pending watch events without triggering scans.
-	drainDone := false
-	for !drainDone {
-		select {
-		case <-watchEvents:
-			// Discard stale event
-		default:
-			drainDone = true
-		}
+	if err := drainPendingWatchEvents(ctx, watchEvents); err != nil {
+		return err
 	}
 	interval := time.Duration(d.cfg.ScanIntervalSeconds) * time.Second
 	if interval <= 0 {
@@ -136,8 +130,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 			// Periodic scan: full if interval elapsed, otherwise incremental
 			incremental := false
 			if d.dirty != nil && d.dirty.Len() == 0 && time.Since(d.lastFullScan) < fullScanInterval {
-				// No dirty paths and full scan not due; skip periodic cycle
-				continue
+				// Poll remote changes and drain queued transfers without walking
+				// the local tree when there are no dirty paths.
+				incremental = true
 			}
 			if d.dirty != nil && d.dirty.Len() > 0 {
 				incremental = true
@@ -218,6 +213,23 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
+// A stopped watcher closes its channel. Receiving without checking ok would
+// spin forever if cancellation arrived while the initial scan was finishing.
+func drainPendingWatchEvents(ctx context.Context, events <-chan watch.Event) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case _, ok := <-events:
+			if !ok {
+				return ctx.Err()
+			}
+		default:
+			return ctx.Err()
+		}
+	}
+}
+
 func (d *Daemon) RunCycle(ctx context.Context) (CycleStats, error) {
 	return d.RunCycleIncremental(ctx, false)
 }
@@ -259,8 +271,16 @@ func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (sta
 	if incremental && d.dirty != nil {
 		dirtyDirs, dirtyPaths = d.dirty.DirsAndPaths()
 		if len(dirtyDirs) == 0 {
-			// Debounce fired but no actual dirty paths; skip
-			return CycleStats{Root: d.cfg.Root, Incremental: true}, nil
+			// Remote polling and queued transfers must continue even when
+			// the watcher is quiet. The download planner checks existing
+			// destinations itself, so this does not require a local scan.
+			queued, err := d.enqueueRemoteDownloads(nil, remoteStats.Metadata)
+			if err != nil {
+				return CycleStats{}, err
+			}
+			return d.processCycleWork(ctx, CycleStats{Root: d.cfg.Root, Incremental: true,
+				RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries,
+				RemoteAppliedFiles: remoteStats.AppliedFiles, RemoteDownloadsQueued: queued})
 		}
 		dirtyDirs = watch.SplitParentDirs(dirtyDirs)
 	}
@@ -347,13 +367,18 @@ func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (sta
 		return CycleStats{}, err
 	}
 
+	return d.processCycleWork(ctx, CycleStats{Root: d.cfg.Root, LocalFiles: len(files), LocalChanged: changed, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles, RemoteDownloadsQueued: remoteDownloadsQueued, LocalUploadsQueued: localUploadsQueued, LocalMissing: missing, Incremental: incremental})
+}
+
+// processCycleWork drains a bounded batch for both scanned and idle cycles.
+func (d *Daemon) processCycleWork(ctx context.Context, stats CycleStats) (CycleStats, error) {
 	limit := d.workerLimit()
 	handler, err := d.workerHandler(ctx)
 	if err != nil {
 		return CycleStats{}, err
 	}
 	p := worker.Processor{Store: d.store, Handler: handler}
-	stats = CycleStats{Root: d.cfg.Root, LocalFiles: len(files), LocalChanged: changed, WorkerProcessLimit: limit, RemotePages: remoteStats.Pages, RemoteEntries: remoteStats.Entries, RemoteAppliedFiles: remoteStats.AppliedFiles, RemoteDownloadsQueued: remoteDownloadsQueued, LocalUploadsQueued: localUploadsQueued, LocalMissing: missing, Incremental: incremental}
+	stats.WorkerProcessLimit = limit
 	for stats.WorkerProcessed < limit {
 		res, err := p.ProcessOne(ctx)
 		if err != nil {
@@ -371,7 +396,7 @@ func (d *Daemon) RunCycleIncremental(ctx context.Context, incremental bool) (sta
 		}
 	}
 	scanMode := "full"
-	if incremental {
+	if stats.Incremental {
 		scanMode = "incremental"
 	}
 	if err := d.store.Event("daemon.cycle", fmt.Sprintf("root=%s mode=%s local_files=%d local_changed=%d local_missing=%d remote_entries=%d remote_applied_files=%d remote_downloads_queued=%d local_uploads_queued=%d worker_processed=%d worker_completed=%d worker_failed=%d", stats.Root, scanMode, stats.LocalFiles, stats.LocalChanged, stats.LocalMissing, stats.RemoteEntries, stats.RemoteAppliedFiles, stats.RemoteDownloadsQueued, stats.LocalUploadsQueued, stats.WorkerProcessed, stats.WorkerCompleted, stats.WorkerFailed)); err != nil {
