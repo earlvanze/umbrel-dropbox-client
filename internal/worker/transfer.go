@@ -51,12 +51,22 @@ func (h TransferHandler) HandleOp(ctx context.Context, op state.PendingOp) error
 	if err != nil {
 		return err
 	}
+	blocked, err := h.Store.HasConflict(planned.Path)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return conflictHoldError{path: planned.Path}
+	}
 	localPath, err := h.localPath(root, planned.Path, planned.LocalPath)
 	if err != nil {
 		return err
 	}
 	switch planned.Op {
 	case string(conflict.UploadLocal):
+		if err := h.checkUploadPathCase(root, localPath, planned); err != nil {
+			return err
+		}
 		return h.upload(ctx, planned, localPath)
 	case string(conflict.DownloadRemote):
 		return h.download(ctx, planned, localPath)
@@ -137,4 +147,41 @@ func (h TransferHandler) localPath(root, dropboxPath, plannedLocalPath string) (
 		return "", fmt.Errorf("local path %s escapes sync root %s", abs, root)
 	}
 	return abs, nil
+}
+
+// Check each directory component as well as the filename: incremental scans
+// may not have visited a differently cased sibling directory.
+func (h TransferHandler) checkUploadPathCase(root, localPath string, planned reconcile.PlannedOp) error {
+	rel, err := filepath.Rel(root, localPath)
+	if err != nil {
+		return err
+	}
+	parent := root
+	for _, component := range strings.Split(rel, string(filepath.Separator)) {
+		entries, err := os.ReadDir(parent)
+		if err != nil {
+			return err
+		}
+		matches := 0
+		exact := false
+		for _, entry := range entries {
+			if strings.ToLower(entry.Name()) == strings.ToLower(component) {
+				matches++
+			}
+			if entry.Name() == component {
+				exact = true
+			}
+		}
+		if matches > 1 {
+			if _, _, err := h.Store.AddConflictIfMissing(planned.Path, "local paths differ only by case", localPath, planned.Rev); err != nil {
+				return err
+			}
+			return conflictHoldError{path: planned.Path}
+		}
+		if !exact {
+			return fmt.Errorf("upload_local %s local path case is not exact", planned.Path)
+		}
+		parent = filepath.Join(parent, component)
+	}
+	return nil
 }
