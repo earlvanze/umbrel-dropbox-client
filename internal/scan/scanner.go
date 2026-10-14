@@ -99,7 +99,13 @@ func walkEntry(root, path string, d fs.DirEntry, opts Options) (relPath string, 
 	}
 	h := ""
 	dp := DropboxPath(rel)
-	if known, ok := opts.KnownFiles[dp]; ok && known.ContentHash != "" && known.Size == info.Size() && known.ModTime.Unix() == info.ModTime().Unix() {
+	known, ok := opts.KnownFiles[dp]
+	if !ok {
+		// Persisted entry keys use Dropbox's lowercase identity, while dp
+		// must retain the actual local spelling for planning and transfers.
+		known, ok = opts.KnownFiles[strings.ToLower(dp)]
+	}
+	if ok && known.ContentHash != "" && known.Size == info.Size() && known.ModTime.Unix() == info.ModTime().Unix() {
 		h = known.ContentHash
 	} else {
 		h, err = hash.DropboxContentHash(path)
