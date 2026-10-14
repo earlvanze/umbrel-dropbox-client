@@ -1,9 +1,11 @@
-FROM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /src
 COPY . .
+ARG TARGETOS
+ARG TARGETARCH
 RUN go test ./... && \
-    go build -o /out/umbrel-dropbox-client ./cmd/umbrel-dropbox-client && \
-    go build -o /out/umbrel-dropbox-clientd ./cmd/umbrel-dropbox-clientd
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/umbrel-dropbox-client ./cmd/umbrel-dropbox-client && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/umbrel-dropbox-clientd ./cmd/umbrel-dropbox-clientd
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates sqlite-libs

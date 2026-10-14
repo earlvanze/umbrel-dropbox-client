@@ -163,3 +163,43 @@ func TestPausedStateRoundTrip(t *testing.T) {
 		t.Fatal("store should be resumed")
 	}
 }
+
+func TestNextReadyPendingOpSkipsConflictsWithoutSpendingAttempts(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	heldID, err := s.EnqueueOp("upload_local", "/held.txt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflictID, err := s.AddConflict("/held.txt", "ambiguous", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readyID, err := s.EnqueueOp("download_remote", "/ready.txt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 7; i++ {
+		op, err := s.NextPendingOp()
+		if err != nil || op == nil || op.ID != readyID {
+			t.Fatalf("op=%#v err=%v", op, err)
+		}
+	}
+	held, err := s.PendingOpByID(heldID)
+	if err != nil || held == nil || held.Attempts != 0 || held.Status != "pending" {
+		t.Fatalf("held=%#v err=%v", held, err)
+	}
+	if ok, err := s.ResolveConflict(conflictID, "fixed"); err != nil || !ok {
+		t.Fatalf("resolved=%v err=%v", ok, err)
+	}
+	op, err := s.NextPendingOp()
+	if err != nil || op == nil || op.ID != heldID {
+		t.Fatalf("op=%#v err=%v", op, err)
+	}
+}

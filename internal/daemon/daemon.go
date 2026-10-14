@@ -471,12 +471,30 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 		}
 		remoteChanged[path] = true
 	}
+	// Linux can contain two names that map to one Dropbox identity. Hold
+	// both instead of letting the last scanned file replace the upload.
+	displayPaths := make(map[string]string, len(localFiles))
+	ambiguous := make(map[string]bool)
+	for _, f := range localFiles {
+		display := scan.DropboxPath(f.Path)
+		key := strings.ToLower(display)
+		if previous, ok := displayPaths[key]; ok && previous != display {
+			ambiguous[key] = true
+		}
+		displayPaths[key] = display
+	}
 	queued := 0
 	for _, f := range localFiles {
 		displayPath := scan.DropboxPath(f.Path)
 		path := strings.ToLower(displayPath)
 		old, watched := prior[path]
 		if !watched || remoteChanged[path] || !d.cfg.IsPathInSyncScope(path) {
+			continue
+		}
+		if ambiguous[path] {
+			if _, _, err := d.store.AddConflictIfMissing(path, "local paths differ only by case", f.AbsPath, ""); err != nil {
+				return queued, err
+			}
 			continue
 		}
 		blocked, err := d.store.HasConflict(path)
@@ -487,7 +505,7 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 			continue
 		}
 		if old != nil {
-			if old.ContentHash == f.ContentHash || old.State == "remote_scanned" {
+			if old.State == "remote_scanned" || (old.ContentHash == f.ContentHash && old.State == "clean") {
 				continue
 			}
 		}
@@ -495,9 +513,41 @@ func (d *Daemon) enqueueWatchedUploads(ctx context.Context, localFiles []scan.Fi
 		if base != "" && base != "/" {
 			remotePath = displayBase + displayPath
 		}
+		rootAbs, rootErr := filepath.Abs(d.cfg.Root)
+		if rootErr != nil {
+			return queued, rootErr
+		}
+		caseVerified := false
+		if f.AbsPath != "" {
+			localAbs, err := filepath.Abs(f.AbsPath)
+			if err != nil {
+				return queued, err
+			}
+			localRel, relErr := filepath.Rel(rootAbs, localAbs)
+			if relErr != nil || localRel == "." || localRel == ".." || strings.HasPrefix(localRel, ".."+string(filepath.Separator)) || filepath.IsAbs(localRel) {
+				return queued, fmt.Errorf("local path %q escapes sync root", f.AbsPath)
+			}
+			caseVerified = displayPath == scan.DropboxPath(filepath.ToSlash(localRel))
+		}
+		if !caseVerified {
+			continue
+		}
 		op := reconcile.PlannedOp{Op: "upload_local", Path: path, RemotePath: remotePath, LocalPath: f.AbsPath, ContentHash: f.ContentHash, Size: f.Size, Reason: "exact local watch event"}
 		if old != nil {
 			op.Rev = old.Rev
+			// A full/neighbor scan may already have recorded the watched
+			// bytes before this event is drained. local_scanned is not proof
+			// of publication. Check the known cloud revision before deciding
+			// that an unchanged local hash is a no-op.
+			if old.ContentHash == f.ContentHash && op.Rev != "" {
+				meta, err := d.lookupExactRemoteMetadata(ctx, remotePath)
+				if err != nil {
+					return queued, err
+				}
+				if meta == nil || meta.Tag != "file" || meta.Rev != op.Rev || meta.ContentHash == f.ContentHash {
+					continue
+				}
+			}
 			if op.Rev == "" {
 				meta, err := d.lookupExactRemoteMetadata(ctx, remotePath)
 				if err != nil {

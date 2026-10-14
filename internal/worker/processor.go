@@ -14,6 +14,14 @@ const (
 	DefaultMaxBackoff  = time.Minute
 )
 
+// conflictHoldError defers an operation without spending its retry budget.
+// Resolving the conflict makes the pending operation eligible again.
+type conflictHoldError struct{ path string }
+
+func (e conflictHoldError) Error() string {
+	return "transfer " + e.path + " held by unresolved conflict"
+}
+
 type Handler interface {
 	HandleOp(context.Context, state.PendingOp) error
 }
@@ -88,6 +96,11 @@ func (p Processor) ProcessOne(ctx context.Context) (Result, error) {
 			return Result{}, err
 		}
 		return Result{Processed: true, OpID: op.ID, Completed: true}, nil
+	}
+
+	var held conflictHoldError
+	if errors.As(handleErr, &held) {
+		return Result{Processed: true, OpID: op.ID, Err: handleErr}, nil
 	}
 
 	attempt := op.Attempts + 1
