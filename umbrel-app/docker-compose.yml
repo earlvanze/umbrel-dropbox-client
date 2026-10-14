@@ -7,7 +7,7 @@ services:
       APP_PORT: 8477
 
   server:
-    image: ghcr.io/earlvanze/umbrel-dropbox-client:sha-fad7311@sha256:6d804ea30b493fd1cbd67fc43b68472939f0f408d6dc32a53322ae4509a65038
+    image: ghcr.io/earlvanze/umbrel-dropbox-client:sha-8b77498@sha256:12206640d77e10175cadd74f785dc232cccfc6ed179f9cbfa11bdc351f75ce65
     restart: on-failure
     user: "1000:1000"
     volumes:
