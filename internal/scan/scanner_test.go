@@ -165,3 +165,44 @@ func TestWalkHonorsShouldScan(t *testing.T) {
 		t.Fatal("ShouldScan=false should skip excluded subtree")
 	}
 }
+
+func TestScanReusesNormalizedKnownHashWithoutChangingDisplayPath(t *testing.T) {
+	root := t.TempDir()
+	local := filepath.Join(root, "Folder", "Report.TXT")
+	if err := os.Mkdir(filepath.Dir(local), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(local, []byte("local bytes"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"/folder/report.txt", "/Folder/Report.TXT"} {
+		for _, incremental := range []bool{false, true} {
+			opts := DefaultOptions()
+			opts.KnownFiles = map[string]KnownFile{key: {Size: info.Size(), ModTime: info.ModTime(), ContentHash: "cached hash sentinel"}}
+			var files []File
+			if incremental {
+				files, err = WalkDirs(root, []string{filepath.Dir(local)}, opts)
+			} else {
+				files, err = Walk(root, opts)
+			}
+			if err != nil || len(files) != 1 {
+				t.Fatalf("files=%#v err=%v", files, err)
+			}
+			if files[0].ContentHash != "cached hash sentinel" || files[0].Path != "/Folder/Report.TXT" || files[0].AbsPath != local {
+				t.Fatalf("file=%#v", files[0])
+			}
+			// A cached identity alone must not bypass size validation.
+			known := opts.KnownFiles[key]
+			known.Size++
+			opts.KnownFiles[key] = known
+			files, err = Walk(root, opts)
+			if err != nil || len(files) != 1 || files[0].ContentHash == "cached hash sentinel" {
+				t.Fatalf("stale files=%#v err=%v", files, err)
+			}
+		}
+	}
+}

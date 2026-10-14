@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/earlvanze/umbrel-dropbox-client/internal/config"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/dropbox"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/hash"
+	"github.com/earlvanze/umbrel-dropbox-client/internal/localpath"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/reconcile"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/scan"
 	"github.com/earlvanze/umbrel-dropbox-client/internal/state"
@@ -431,10 +433,19 @@ func (d *Daemon) enqueueRemoteDownloads(localFiles []scan.File, remoteEntries []
 		// Incremental scans cover watched directories only. A remote delta may
 		// refer to an existing local file elsewhere; never queue an overwrite
 		// merely because it was absent from this cycle's local scan.
-		localPath := filepath.Join(d.cfg.Root, filepath.FromSlash(strings.TrimPrefix(op.Path, "/")))
-		rel, err := filepath.Rel(d.cfg.Root, localPath)
-		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-			return queued, fmt.Errorf("remote path %q escapes sync root", op.Path)
+		display := op.DisplayPath
+		if display == "" {
+			display = op.Path
+		}
+		localPath, err := localpath.Resolve(d.cfg.Root, display)
+		if errors.Is(err, localpath.ErrUnsafe) {
+			if _, _, err := d.store.AddConflictIfMissing(op.Path, "unsafe or ambiguous download destination", "", op.Rev); err != nil {
+				return queued, err
+			}
+			continue
+		}
+		if err != nil {
+			return queued, err
 		}
 		info, err := os.Lstat(localPath)
 		if err == nil {

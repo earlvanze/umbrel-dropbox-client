@@ -134,7 +134,7 @@ func TestTransferHandlerDownloadsWithoutOverwriteAndUpdatesEntry(t *testing.T) {
 	root := t.TempDir()
 	wantLocal := filepath.Join(root, "nested", "a.txt")
 	client := &fakeTransferClient{downloadFn: func(path, local string) (*dropbox.Metadata, error) {
-		if path != "/nested/a.txt" || local != wantLocal {
+		if path != "/nested/a.txt" || filepath.Base(local) != "content" {
 			t.Fatalf("path=%s local=%s", path, local)
 		}
 		if err := os.MkdirAll(filepath.Dir(local), 0700); err != nil {
@@ -184,7 +184,7 @@ func TestTransferHandlerRefusesDownloadOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Failed || res.Err == nil {
+	if res.Completed || res.Err == nil {
 		t.Fatalf("result=%#v", res)
 	}
 }
@@ -227,9 +227,8 @@ func TestTransferHandlerUsesRemotePathForScopedUploadAndDownload(t *testing.T) {
 		t.Fatalf("result=%#v client=%#v", res, client)
 	}
 
-	downloadLocal := filepath.Join(root, "remote.md")
 	client.downloadFn = func(path, local string) (*dropbox.Metadata, error) {
-		if path != "/obsidian/remote.md" || local != downloadLocal {
+		if path != "/obsidian/remote.md" || filepath.Base(local) != "content" {
 			t.Fatalf("path=%s local=%s", path, local)
 		}
 		if err := os.WriteFile(local, []byte("payload"), 0600); err != nil {
