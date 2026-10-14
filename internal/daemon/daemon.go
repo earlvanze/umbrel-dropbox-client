@@ -628,6 +628,18 @@ func (d *Daemon) HealthHandler() http.Handler {
 			d.serveDownload(w, r)
 		case "/healthz", "/status", "/api/status":
 			d.serveStatusJSON(w, r)
+		case "/api/pause":
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			d.servePause(w, r)
+		case "/api/resume":
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			d.serveResume(w, r)
 		case "/api/events":
 			d.serveEventsJSON(w, r)
 		case "/api/restart":
