@@ -184,34 +184,6 @@ func (c *Client) GetMetadata(ctx context.Context, path string) (*Metadata, error
 	return &meta, nil
 }
 
-// GetMetadataForDisplayPath requests metadata by the exact display path. If
-// Dropbox reports that this path does not exist, it retries using the Dropbox
-// path_lower form and returns metadata only for entries whose stable path
-// lower matches. Case-fold collisions therefore cannot silently match.
-func (c *Client) GetMetadataForDisplayPath(ctx context.Context, displayPath string) (*Metadata, error) {
-	meta, err := c.GetMetadata(ctx, displayPath)
-	if err == nil && meta != nil {
-		if NormalizeDropboxPath(meta.PathLower) == NormalizeDropboxPath(displayPath) {
-			return meta, nil
-		}
-	}
-	lowerPath := NormalizeDropboxPath(displayPath)
-	if lowerPath == displayPath {
-		return meta, err
-	}
-	lowerMeta, lowerErr := c.GetMetadata(ctx, lowerPath)
-	if lowerErr != nil {
-		if meta == nil && err != nil && strings.Contains(err.Error(), "dropbox metadata:") {
-			return nil, err
-		}
-		return meta, err
-	}
-	if lowerMeta != nil && NormalizeDropboxPath(lowerMeta.PathLower) == lowerPath {
-		return lowerMeta, nil
-	}
-	return meta, err
-}
-
 func (c *Client) UploadFile(ctx context.Context, dropboxPath, localPath string) (*Metadata, error) {
 	f, err := os.Open(localPath)
 	if err != nil {

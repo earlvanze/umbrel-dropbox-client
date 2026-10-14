@@ -702,7 +702,7 @@ func cmdSmokeTest(args []string) {
 		fatal("expected 1 smoke file, got %d", len(files))
 	}
 	dropboxPath := pathJoinDropbox(*remotePath, "smoke.txt")
-	planned := reconcile.PlannedOp{Op: "upload_local", Path: dropboxPath, LocalPath: local, ContentHash: files[0].ContentHash, Size: files[0].Size, LocalPathCaseVerified: true, Reason: "smoke test upload"}
+	planned := reconcile.PlannedOp{Op: "upload_local", Path: dropboxPath, LocalPath: local, ContentHash: files[0].ContentHash, Size: files[0].Size, Reason: "smoke test upload"}
 	_, created, err := s.EnqueueOpIfMissing(planned.Op, planned.Path, planned)
 	must(err)
 	if !created {

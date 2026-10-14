@@ -28,7 +28,7 @@ func TestRunCycleScansLocalFilesAndProcessesDryRunQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := testStore(t)
-	if _, err := s.EnqueueOp("upload_local", "/a.txt", reconcile.PlannedOp{Op: "upload_local", Path: "/a.txt", LocalPath: local, LocalPathCaseVerified: true, Reason: "test"}); err != nil {
+	if _, err := s.EnqueueOp("upload_local", "/a.txt", reconcile.PlannedOp{Op: "upload_local", Path: "/a.txt", LocalPath: local, Reason: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	d := New(config.Config{Root: root, DryRun: true, UploadWorkers: 1, DownloadWorkers: 1}, s, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -95,6 +95,31 @@ func TestWatchedUploadsSkipRemoteDeltaAndNoWatch(t *testing.T) {
 	prior["/old.txt"].State = "remote_scanned"
 	if n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil); err != nil || n != 0 {
 		t.Fatalf("remote changed queued=%d err=%v", n, err)
+	}
+}
+
+func TestWatchedUploadAfterNeighborScanDoesNotLoseUnpublishedChange(t *testing.T) {
+	for _, tc := range []struct {
+		name, remoteRev, remoteHash string
+		want                        int
+	}{
+		{"unpublished local bytes", "r1", "old", 1},
+		{"already published", "r1", "new", 0},
+		{"remote conflict", "r2", "remote edit", 0},
+		{"remote missing revision", "", "old", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := testStore(t)
+			root := t.TempDir()
+			d := New(config.Config{Root: root, DryRun: true}, s, nil)
+			d.metadataClient = fakeExactMetadataClient{meta: &dropbox.Metadata{Tag: "file", Rev: tc.remoteRev, ContentHash: tc.remoteHash}}
+			files := []scan.File{{Path: "/ledger.csv", AbsPath: filepath.Join(root, "ledger.csv"), ContentHash: "new"}}
+			prior := map[string]*state.Entry{"/ledger.csv": {Path: "/ledger.csv", ContentHash: "new", Rev: "r1", State: "local_scanned"}}
+			n, err := d.enqueueWatchedUploads(context.Background(), files, prior, nil)
+			if err != nil || n != tc.want {
+				t.Fatalf("queued=%d want=%d err=%v", n, tc.want, err)
+			}
+		})
 	}
 }
 
@@ -741,5 +766,67 @@ func TestWatchedUploadPreservesRemoteDisplayCaseForExactRevisionLookup(t *testin
 	op, err := s.NextPendingOp()
 	if err != nil || op == nil || !strings.Contains(op.Payload, `"remote_path":"/LEDGER.csv"`) || !strings.Contains(op.Payload, `"path":"/ledger.csv"`) {
 		t.Fatalf("op=%#v", op)
+	}
+}
+
+func TestWatchedUploadRejectsAmbiguousLocalPath(t *testing.T) {
+	for _, stateName := range []string{"new", "clean", "local_scanned"} {
+		for _, tc := range []struct {
+			name, relative, absolute string
+			wantError                bool
+		}{
+			{"case mismatch", "/Folder/Report.txt", "folder/Report.txt", false},
+			{"missing absolute path", "/Folder/Report.txt", "", false},
+			{"outside root", "/Report.txt", "../Report.txt", true},
+			{"parent itself", "/Report.txt", "..", true},
+		} {
+			t.Run(stateName+"/"+tc.name, func(t *testing.T) {
+				root := t.TempDir()
+				s := testStore(t)
+				d := New(config.Config{Root: root, DryRun: true}, s, nil)
+				abs := ""
+				if tc.absolute != "" {
+					abs = filepath.Join(root, tc.absolute)
+				}
+				var old *state.Entry
+				if stateName != "new" {
+					old = &state.Entry{ContentHash: "old", State: stateName}
+					if stateName == "clean" {
+						old.Rev = "r1"
+					}
+				}
+				key := strings.ToLower(tc.relative)
+				n, err := d.enqueueWatchedUploads(context.Background(), []scan.File{{Path: tc.relative, AbsPath: abs, ContentHash: "new"}}, map[string]*state.Entry{key: old}, nil)
+				if n != 0 || (err != nil) != tc.wantError {
+					t.Fatalf("queued=%d err=%v", n, err)
+				}
+				op, err := s.NextPendingOp()
+				if err != nil || op != nil {
+					t.Fatalf("op=%#v err=%v", op, err)
+				}
+			})
+		}
+	}
+}
+
+func TestWatchedUploadHoldsCaseCollision(t *testing.T) {
+	root := t.TempDir()
+	s := testStore(t)
+	d := New(config.Config{Root: root, DryRun: true}, s, nil)
+	files := []scan.File{
+		{Path: "/Report.txt", AbsPath: filepath.Join(root, "Report.txt"), ContentHash: "first"},
+		{Path: "/report.txt", AbsPath: filepath.Join(root, "report.txt"), ContentHash: "second"},
+	}
+	n, err := d.enqueueWatchedUploads(context.Background(), files, map[string]*state.Entry{"/report.txt": nil}, nil)
+	if err != nil || n != 0 {
+		t.Fatalf("queued=%d err=%v", n, err)
+	}
+	blocked, err := s.HasConflict("/report.txt")
+	if err != nil || !blocked {
+		t.Fatalf("blocked=%v err=%v", blocked, err)
+	}
+	op, err := s.NextPendingOp()
+	if err != nil || op != nil {
+		t.Fatalf("op=%#v err=%v", op, err)
 	}
 }
