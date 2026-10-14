@@ -14,10 +14,11 @@ import (
 )
 
 type Client struct {
-	token      string
-	http       *http.Client
-	apiURL     string
-	contentURL string
+	token       string
+	http        *http.Client
+	contentHTTP *http.Client
+	apiURL      string
+	contentURL  string
 }
 
 func New(token string) *Client {
@@ -31,7 +32,12 @@ func NewWithHTTP(token string, httpClient *http.Client, apiURL string) *Client {
 	if apiURL == "" {
 		apiURL = "https://api.dropboxapi.com/2"
 	}
-	return &Client{token: token, http: httpClient, apiURL: strings.TrimRight(apiURL, "/"), contentURL: contentURLFor(apiURL)}
+	// Metadata calls remain short-lived, but large streamed files routinely
+	// take longer than the RPC client's one-minute deadline. Copy the client
+	// so transport/auth customizations survive without mutating the caller.
+	contentClient := *httpClient
+	contentClient.Timeout = time.Hour
+	return &Client{token: token, http: httpClient, contentHTTP: &contentClient, apiURL: strings.TrimRight(apiURL, "/"), contentURL: contentURLFor(apiURL)}
 }
 
 func contentURLFor(apiURL string) string {
@@ -292,7 +298,7 @@ func (c *Client) content(ctx context.Context, url string, arg any, body io.Reade
 	if len(writers) == 0 {
 		req.Header.Set("Content-Type", "application/octet-stream")
 	}
-	res, err := c.http.Do(req)
+	res, err := c.contentHTTP.Do(req)
 	if err != nil {
 		return err
 	}

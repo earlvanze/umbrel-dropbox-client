@@ -1,14 +1,17 @@
 package dropbox
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestUploadFileSendsDropboxAPIArgAndBody(t *testing.T) {
@@ -140,5 +143,58 @@ func TestDownloadFileUsesDropboxAPIArgAndAtomicRename(t *testing.T) {
 	}
 	if string(body) != "payload" {
 		t.Fatalf("body=%q", body)
+	}
+}
+
+func TestContentTransferOutlivesRPCDeadline(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Dropbox-API-Result", `{".tag":"file","size":7}`)
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+		if r.URL.Path == "/files/download" {
+			_, _ = w.Write([]byte("payload"))
+		} else {
+			_, _ = w.Write([]byte(`{"account_id":"test"}`))
+		}
+	}))
+	defer srv.Close()
+	injected := srv.Client()
+	injected.Timeout = 25 * time.Millisecond
+	c := NewWithHTTP("token", injected, srv.URL)
+	var out bytes.Buffer
+	if _, err := c.Download(context.Background(), "/large.mp4", &out); err != nil || out.String() != "payload" {
+		t.Fatalf("body=%q err=%v", out.String(), err)
+	}
+	if _, err := c.CurrentAccount(context.Background()); err == nil {
+		t.Fatal("RPC unexpectedly ignored its short deadline")
+	}
+	if injected.Timeout != 25*time.Millisecond {
+		t.Fatal("caller client was mutated")
+	}
+}
+
+func TestContentCancellationRemovesPartialDownload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Dropbox-API-Result", `{".tag":"file","size":1000}`)
+		_, _ = w.Write([]byte("partial"))
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	root := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	_, err := NewWithHTTP("token", srv.Client(), srv.URL).DownloadFile(ctx, "/large.mp4", filepath.Join(root, "large.mp4"))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error=%v", err)
+	}
+	files, err := os.ReadDir(root)
+	if err != nil || len(files) != 0 {
+		t.Fatalf("partial files=%v err=%v", files, err)
 	}
 }
