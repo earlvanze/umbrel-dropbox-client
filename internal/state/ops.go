@@ -40,7 +40,7 @@ func (s *Store) NextPendingOp() (*PendingOp, error) {
 }
 
 func (s *Store) NextReadyPendingOp(now time.Time) (*PendingOp, error) {
-	row := s.db.QueryRow(`select id, op, path, coalesce(payload,''), created_at, attempts, status, coalesce(retry_at,''), coalesce(last_error,''), coalesce(completed_at,'') from pending_ops where status = 'pending' and (retry_at is null or retry_at = '' or retry_at <= ?) order by attempts asc, id asc limit 1`, now.UTC().Format(time.RFC3339Nano))
+	row := s.db.QueryRow(`select id, op, path, coalesce(payload,''), created_at, attempts, status, coalesce(retry_at,''), coalesce(last_error,''), coalesce(completed_at,'') from pending_ops where status = 'pending' and not exists (select 1 from conflicts where conflicts.path = pending_ops.path) and (retry_at is null or retry_at = '' or retry_at <= ?) order by attempts asc, id asc limit 1`, now.UTC().Format(time.RFC3339Nano))
 	var out PendingOp
 	var created, retryAt, completedAt string
 	if err := row.Scan(&out.ID, &out.Op, &out.Path, &out.Payload, &created, &out.Attempts, &out.Status, &retryAt, &out.LastError, &completedAt); err != nil {

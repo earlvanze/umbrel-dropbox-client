@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -246,5 +247,108 @@ func TestTransferHandlerUsesRemotePathForScopedUploadAndDownload(t *testing.T) {
 	}
 	if !res.Completed {
 		t.Fatalf("result=%#v", res)
+	}
+}
+
+func TestTransferHandlerHoldsPreviouslyQueuedUploadAfterConflict(t *testing.T) {
+	root := t.TempDir()
+	local := filepath.Join(root, "Report.txt")
+	if err := os.WriteFile(local, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := testStore(t)
+	id, err := s.EnqueueOp("upload_local", "/report.txt", reconcile.PlannedOp{Op: "upload_local", Path: "/report.txt", LocalPath: local, ContentHash: mustHashPath(local)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cid, _, err := s.AddConflictIfMissing("/report.txt", "local paths differ only by case", local, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeTransferClient{}
+	h := TransferHandler{Store: s, Client: client, Root: root, AllowLive: true}
+	p := Processor{Store: s, Handler: h, Now: fixedNow}
+	for i := 0; i < 7; i++ {
+		res, err := p.ProcessOne(context.Background())
+		if err != nil || res.Processed || client.uploadPath != "" {
+			t.Fatalf("result=%#v err=%v", res, err)
+		}
+	}
+	op, err := s.PendingOpByID(id)
+	if err != nil || op == nil || op.Attempts != 0 || op.Status != "pending" {
+		t.Fatalf("op=%#v err=%v", op, err)
+	}
+	if err := h.HandleOp(context.Background(), *op); err == nil {
+		t.Fatal("direct handler ignored conflict")
+	}
+	if ok, err := s.ResolveConflict(cid, "resolved"); err != nil || !ok {
+		t.Fatalf("resolved=%v err=%v", ok, err)
+	}
+	res, err := p.ProcessOne(context.Background())
+	if err != nil || !res.Completed || client.uploadPath == "" {
+		t.Fatalf("result=%#v err=%v", res, err)
+	}
+}
+
+func TestTransferHandlerDetectsCaseCollisionOutsideScannedDirectory(t *testing.T) {
+	for _, directoryCollision := range []bool{true, false} {
+		t.Run(fmt.Sprint(directoryCollision), func(t *testing.T) {
+			root := t.TempDir()
+			local := filepath.Join(root, "Folder", "Report.txt")
+			if err := os.MkdirAll(filepath.Dir(local), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(local, []byte("hello"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			other := filepath.Join(root, "Folder", "report.txt")
+			if directoryCollision {
+				other = filepath.Join(root, "folder", "different.txt")
+			}
+			if err := os.MkdirAll(filepath.Dir(other), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(other, []byte("other"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			s := testStore(t)
+			id, err := s.EnqueueOp("upload_local", "/folder/report.txt", reconcile.PlannedOp{Op: "upload_local", Path: "/folder/report.txt", LocalPath: local, ContentHash: mustHashPath(local)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := &fakeTransferClient{}
+			p := Processor{Store: s, Handler: TransferHandler{Store: s, Client: client, Root: root, AllowLive: true}, Now: fixedNow}
+			res, err := p.ProcessOne(context.Background())
+			if err != nil || !res.Processed || res.Completed || res.Err == nil || client.uploadPath != "" {
+				t.Fatalf("result=%#v err=%v", res, err)
+			}
+			op, err := s.PendingOpByID(id)
+			if err != nil || op == nil || op.Attempts != 0 || op.Status != "pending" {
+				t.Fatalf("op=%#v err=%v", op, err)
+			}
+			cs, err := s.ListConflicts(10)
+			if err != nil || len(cs) != 1 {
+				t.Fatalf("conflicts=%#v err=%v", cs, err)
+			}
+			res, err = p.ProcessOne(context.Background())
+			if err != nil || res.Processed {
+				t.Fatalf("result=%#v err=%v", res, err)
+			}
+			// Fix the directory/name ambiguity, then acknowledge the conflict.
+			if directoryCollision {
+				if err := os.Rename(filepath.Dir(other), filepath.Join(root, "Other")); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Rename(other, filepath.Join(root, "Folder", "Other.txt")); err != nil {
+				t.Fatal(err)
+			}
+			if ok, err := s.ResolveConflict(cs[0].ID, "renamed sibling"); err != nil || !ok {
+				t.Fatalf("resolved=%v err=%v", ok, err)
+			}
+			res, err = p.ProcessOne(context.Background())
+			if err != nil || !res.Completed || client.uploadPath == "" {
+				t.Fatalf("result=%#v err=%v", res, err)
+			}
+		})
 	}
 }
