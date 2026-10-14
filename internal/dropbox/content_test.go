@@ -111,7 +111,7 @@ func TestGetMetadataDistinguishesFoundFromMissing(t *testing.T) {
 	}
 }
 
-func TestDownloadFileUsesDropboxAPIArgAndAtomicRename(t *testing.T) {
+func TestDownloadFileUsesDropboxAPIArgAndAtomicPublish(t *testing.T) {
 	root := t.TempDir()
 	local := filepath.Join(root, "nested", "a.txt")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,5 +196,32 @@ func TestContentCancellationRemovesPartialDownload(t *testing.T) {
 	files, err := os.ReadDir(root)
 	if err != nil || len(files) != 0 {
 		t.Fatalf("partial files=%v err=%v", files, err)
+	}
+}
+
+func TestDownloadFileDoesNotClobberFileAppearingDuringTransfer(t *testing.T) {
+	root := t.TempDir()
+	local := filepath.Join(root, "a.txt")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := os.WriteFile(local, []byte("local winner"), 0600); err != nil {
+			t.Error(err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Dropbox-API-Result", `{".tag":"file","path_lower":"/a.txt","rev":"r2","size":7}`)
+		_, _ = w.Write([]byte("payload"))
+	}))
+	defer srv.Close()
+	_, err := NewWithHTTP("token", srv.Client(), srv.URL).DownloadFile(context.Background(), "/a.txt", local)
+	if !os.IsExist(err) {
+		t.Fatalf("expected no-clobber error, got %v", err)
+	}
+	b, err := os.ReadFile(local)
+	if err != nil || string(b) != "local winner" {
+		t.Fatalf("data=%q err=%v", b, err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("entries=%v err=%v", entries, err)
 	}
 }

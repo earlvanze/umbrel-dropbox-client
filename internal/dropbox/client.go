@@ -256,7 +256,8 @@ func (c *Client) DownloadFile(ctx context.Context, dropboxPath, localPath string
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Rename(tmpName, localPath); err != nil {
+	// Link publishes atomically without replacing a file created during transfer.
+	if err := os.Link(tmpName, localPath); err != nil {
 		return nil, err
 	}
 	return meta, nil

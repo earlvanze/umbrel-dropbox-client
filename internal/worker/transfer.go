@@ -58,6 +58,9 @@ func (h TransferHandler) HandleOp(ctx context.Context, op state.PendingOp) error
 	if blocked {
 		return conflictHoldError{path: planned.Path}
 	}
+	if planned.Op == string(conflict.DownloadRemote) {
+		return h.download(ctx, planned, root)
+	}
 	localPath, err := h.localPath(root, planned.Path, planned.LocalPath)
 	if err != nil {
 		return err
@@ -68,8 +71,6 @@ func (h TransferHandler) HandleOp(ctx context.Context, op state.PendingOp) error
 			return err
 		}
 		return h.upload(ctx, planned, localPath)
-	case string(conflict.DownloadRemote):
-		return h.download(ctx, planned, localPath)
 	default:
 		return fmt.Errorf("unsupported pending op %q for transfer", planned.Op)
 	}
@@ -104,30 +105,6 @@ func (h TransferHandler) upload(ctx context.Context, planned reconcile.PlannedOp
 		return err
 	}
 	return h.Store.UpsertEntry(state.Entry{Path: planned.Path, DropboxID: meta.ID, Rev: meta.Rev, ContentHash: meta.ContentHash, Size: meta.Size, MTime: meta.ServerMtime, State: "clean"})
-}
-
-func (h TransferHandler) download(ctx context.Context, planned reconcile.PlannedOp, localPath string) error {
-	dropboxPath := planned.RemotePath
-	if dropboxPath == "" {
-		dropboxPath = planned.Path
-	}
-	if _, err := os.Stat(localPath); err == nil {
-		return fmt.Errorf("download_remote %s refused to overwrite existing local file", planned.Path)
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	meta, err := h.Client.DownloadFile(ctx, dropboxPath, localPath)
-	if err != nil {
-		return err
-	}
-	contentHash, err := hash.DropboxContentHash(localPath)
-	if err != nil {
-		return err
-	}
-	if planned.ContentHash != "" && contentHash != planned.ContentHash {
-		return fmt.Errorf("download_remote %s content hash mismatch", planned.Path)
-	}
-	return h.Store.UpsertEntry(state.Entry{Path: planned.Path, DropboxID: meta.ID, Rev: meta.Rev, ContentHash: contentHash, Size: meta.Size, MTime: meta.ServerMtime, State: "clean"})
 }
 
 func (h TransferHandler) localPath(root, dropboxPath, plannedLocalPath string) (string, error) {

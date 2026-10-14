@@ -13,6 +13,7 @@ type PlannedOp struct {
 	Op          string `json:"op"`
 	Path        string `json:"path"`
 	RemotePath  string `json:"remote_path,omitempty"`
+	DisplayPath string `json:"display_path,omitempty"`
 	LocalPath   string `json:"local_path,omitempty"`
 	DropboxID   string `json:"dropbox_id,omitempty"`
 	Rev         string `json:"rev,omitempty"`
@@ -87,7 +88,7 @@ func BuildDryRunPlanWithRemoteBase(localFiles []scan.File, remoteEntries []dropb
 		case conflict.UploadLocal:
 			out.Ops = append(out.Ops, PlannedOp{Op: string(conflict.UploadLocal), Path: p, RemotePath: joinRemoteBase(base, p), LocalPath: lf.AbsPath, ContentHash: lf.ContentHash, Size: lf.Size, Reason: res.Reason})
 		case conflict.DownloadRemote:
-			out.Ops = append(out.Ops, PlannedOp{Op: string(conflict.DownloadRemote), Path: p, RemotePath: remotePaths[p], DropboxID: re.ID, Rev: re.Rev, ContentHash: re.ContentHash, Size: re.Size, Reason: res.Reason})
+			out.Ops = append(out.Ops, PlannedOp{Op: string(conflict.DownloadRemote), Path: p, RemotePath: remotePaths[p], DisplayPath: RelativeDisplayPath(re.PathDisplay, remotePaths[p], p), DropboxID: re.ID, Rev: re.Rev, ContentHash: re.ContentHash, Size: re.Size, Reason: res.Reason})
 		case conflict.RecordConflict:
 			out.Conflicts = append(out.Conflicts, PlannedConflict{Path: p, Reason: res.Reason, LocalPath: lf.AbsPath, RemoteRev: re.Rev})
 		}
@@ -130,4 +131,22 @@ func joinRemoteBase(base, path string) string {
 		return base
 	}
 	return base + path
+}
+
+// RelativeDisplayPath returns the display-cased suffix belonging to the local
+// identity, or an empty string when metadata does not establish that identity.
+func RelativeDisplayPath(display, remoteIdentity, localIdentity string) string {
+	if display == "" || strings.ToLower(display) != strings.ToLower(remoteIdentity) {
+		return ""
+	}
+	remoteParts := strings.Split(strings.TrimPrefix(display, "/"), "/")
+	localParts := strings.Split(strings.TrimPrefix(localIdentity, "/"), "/")
+	if len(remoteParts) < len(localParts) {
+		return ""
+	}
+	suffix := "/" + strings.Join(remoteParts[len(remoteParts)-len(localParts):], "/")
+	if strings.ToLower(suffix) != strings.ToLower(localIdentity) {
+		return ""
+	}
+	return suffix
 }

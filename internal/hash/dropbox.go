@@ -17,6 +17,11 @@ func DropboxContentHash(path string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
+	return DropboxContentHashReader(f)
+}
+
+// DropboxContentHashReader hashes bytes from the current reader position.
+func DropboxContentHashReader(f io.Reader) (string, error) {
 	outer := sha256.New()
 	buf := make([]byte, blockSize)
 	for {
