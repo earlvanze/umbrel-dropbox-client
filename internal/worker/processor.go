@@ -120,6 +120,39 @@ func (p Processor) ProcessOne(ctx context.Context) (Result, error) {
 	return Result{Processed: true, OpID: op.ID, RetryAt: retryAt, Err: handleErr}, nil
 }
 
+// PreviewResult summarizes a read-only preview pass.
+type PreviewResult struct {
+	Processed int
+	Completed int
+	Failed    int
+}
+
+// Preview runs the handler over up to limit ready operations without
+// completing, retrying, failing, or deleting any of them. A dry run must leave
+// the queue exactly as it found it.
+func (p Processor) Preview(ctx context.Context, limit int) (PreviewResult, error) {
+	var out PreviewResult
+	if p.Store == nil {
+		return out, errors.New("worker processor missing store")
+	}
+	if p.Handler == nil {
+		return out, errors.New("worker processor missing handler")
+	}
+	ops, err := p.Store.ListReadyPendingOps(p.now(), limit)
+	if err != nil {
+		return out, err
+	}
+	for _, op := range ops {
+		out.Processed++
+		if err := p.Handler.HandleOp(ctx, op); err != nil {
+			out.Failed++
+			continue
+		}
+		out.Completed++
+	}
+	return out, nil
+}
+
 func (p Processor) now() time.Time {
 	if p.Now != nil {
 		return p.Now().UTC()
