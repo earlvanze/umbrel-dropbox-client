@@ -122,3 +122,23 @@ func TestDryRunHandlerRejectsUnsupportedOp(t *testing.T) {
 		t.Fatalf("op=%#v", got)
 	}
 }
+
+func TestPreviewNeverMutatesQueue(t *testing.T) {
+	s := testStore(t)
+	planned := reconcile.PlannedOp{Op: "upload_local", Path: "/a.txt", LocalPath: "/dropbox/a.txt", Reason: "test"}
+	if _, _, err := s.EnqueueOpIfMissing(planned.Op, planned.Path, planned); err != nil {
+		t.Fatal(err)
+	}
+	p := Processor{Store: s, Handler: DryRunHandler{Store: s}, Now: fixedNow}
+	res, err := p.Preview(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Processed != 1 || res.Completed != 1 {
+		t.Fatalf("preview result = %+v", res)
+	}
+	op, err := s.NextReadyPendingOp(fixedNow())
+	if err != nil || op == nil || op.Attempts != 0 || op.Status != "pending" {
+		t.Fatalf("preview consumed or changed the op: %+v err=%v", op, err)
+	}
+}

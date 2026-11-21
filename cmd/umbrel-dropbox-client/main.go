@@ -798,6 +798,14 @@ func cmdWorker(args []string) {
 	}
 	p := worker.Processor{Store: s, Handler: handler}
 	processed, completed, failed := 0, 0, 0
+	if !*live {
+		// --dry-run must never mutate the queue.
+		res, err := p.Preview(context.Background(), *limit)
+		must(err)
+		must(s.Event("worker.dry_run.batch", fmt.Sprintf("processed=%d completed=%d failed=%d limit=%d", res.Processed, res.Completed, res.Failed, *limit)))
+		fmt.Printf("dry_run worker complete: processed=%d completed=%d failed=%d db=%s (queue unchanged)\n", res.Processed, res.Completed, res.Failed, *db)
+		return
+	}
 	for processed < *limit {
 		res, err := p.ProcessOne(context.Background())
 		must(err)

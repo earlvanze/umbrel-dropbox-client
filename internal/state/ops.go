@@ -55,6 +55,33 @@ func (s *Store) NextReadyPendingOp(now time.Time) (*PendingOp, error) {
 	return &out, nil
 }
 
+// ListReadyPendingOps returns up to limit ready pending operations in the same
+// order NextReadyPendingOp uses, without changing any row. Dry-run previews use
+// it so that previewing a queue can never consume it.
+func (s *Store) ListReadyPendingOps(now time.Time, limit int) ([]PendingOp, error) {
+	if limit < 1 {
+		return nil, nil
+	}
+	rows, err := s.db.Query(`select id, op, path, coalesce(payload,''), created_at, attempts, status, coalesce(retry_at,''), coalesce(last_error,''), coalesce(completed_at,'') from pending_ops where status = 'pending' and not exists (select 1 from conflicts where conflicts.path = pending_ops.path) and (retry_at is null or retry_at = '' or retry_at <= ?) order by attempts asc, id asc limit ?`, now.UTC().Format(time.RFC3339Nano), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PendingOp
+	for rows.Next() {
+		var op PendingOp
+		var created, retryAt, completedAt string
+		if err := rows.Scan(&op.ID, &op.Op, &op.Path, &op.Payload, &created, &op.Attempts, &op.Status, &retryAt, &op.LastError, &completedAt); err != nil {
+			return nil, err
+		}
+		op.CreatedAt = parseTime(created)
+		op.RetryAt = parseTime(retryAt)
+		op.Completed = parseTime(completedAt)
+		out = append(out, op)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) MarkOpAttempt(id int64) error {
 	_, err := s.db.Exec(`update pending_ops set attempts = attempts + 1 where id = ?`, id)
 	return err
